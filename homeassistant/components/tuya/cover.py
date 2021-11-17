@@ -57,14 +57,14 @@ COVERS: dict[str, tuple[TuyaCoverEntityDescription, ...]] = {
         TuyaCoverEntityDescription(
             key=DPCode.CONTROL_2,
             name="Curtain 2",
-            current_position=(DPCode.PERCENT_CONTROL_2, DPCode.PERCENT_STATE_2),
+            current_position=DPCode.PERCENT_STATE_2,
             set_position=DPCode.PERCENT_CONTROL_2,
             device_class=DEVICE_CLASS_CURTAIN,
         ),
         TuyaCoverEntityDescription(
             key=DPCode.CONTROL_3,
             name="Curtain 3",
-            current_position=(DPCode.PERCENT_CONTROL_3, DPCode.PERCENT_STATE_3),
+            current_position=DPCode.PERCENT_STATE_3,
             set_position=DPCode.PERCENT_CONTROL_3,
             device_class=DEVICE_CLASS_CURTAIN,
         ),
@@ -236,27 +236,26 @@ class TuyaCoverEntity(TuyaEntity, CoverEntity):
             return None
 
         if not (
-            self.entity_description.current_position
-            or self.entity_description.set_position
+            dpcode := (
+                self.entity_description.current_position
+                or self.entity_description.set_position
+            )
         ):
             return None
 
-        if (
-            current_position := self.device.status.get(
-                self.entity_description.current_position
+        # Determine current_position is tuple
+        if isinstance(self.entity_description.current_position, tuple):
+            dpcode = next(
+                (
+                    dpcode
+                    for dpcode in self.entity_description.current_position
+                    if self.device.status.get(dpcode) is not None
+                ),
+                None,
             )
-        ) is None:
-            current_position = 0
 
-        if (
-            set_position := self.device.status.get(self.entity_description.set_position)
-        ) is None:
-            set_position = 0
-
-        if current_position == 0 and set_position != 0:
-            position = set_position
-        else:
-            position = current_position
+        if (position := self.device.status.get(dpcode)) is None:
+            return None
 
         return round(
             self._current_position_type.remap_value_to(position, 0, 100, reverse=True)
