@@ -32,10 +32,11 @@ async def test_default_setup(hass, aioclient_mock):
     """Test the default setup."""
     aioclient_mock.get(
         re.compile("api.foobot.io/v2/owner/.*"),
-        text=load_fixture("foobot_devices.json"),
+        text=load_fixture("devices.json", "foobot"),
     )
     aioclient_mock.get(
-        re.compile("api.foobot.io/v2/device/.*"), text=load_fixture("foobot_data.json")
+        re.compile("api.foobot.io/v2/device/.*"),
+        text=load_fixture("data.json", "foobot"),
     )
     assert await async_setup_component(hass, sensor.DOMAIN, {"sensor": VALID_CONFIG})
     await hass.async_block_till_done()
@@ -63,9 +64,7 @@ async def test_setup_timeout_error(hass, aioclient_mock):
         re.compile("api.foobot.io/v2/owner/.*"), exc=asyncio.TimeoutError()
     )
     with pytest.raises(PlatformNotReady):
-        await foobot.async_setup_platform(
-            hass, {"sensor": VALID_CONFIG}, fake_async_add_entities
-        )
+        await foobot.async_setup_platform(hass, VALID_CONFIG, fake_async_add_entities)
 
 
 async def test_setup_permanent_error(hass, aioclient_mock):
@@ -76,7 +75,7 @@ async def test_setup_permanent_error(hass, aioclient_mock):
     for error in errors:
         aioclient_mock.get(re.compile("api.foobot.io/v2/owner/.*"), status=error)
         result = await foobot.async_setup_platform(
-            hass, {"sensor": VALID_CONFIG}, fake_async_add_entities
+            hass, VALID_CONFIG, fake_async_add_entities
         )
         assert result is None
 
@@ -90,5 +89,5 @@ async def test_setup_temporary_error(hass, aioclient_mock):
         aioclient_mock.get(re.compile("api.foobot.io/v2/owner/.*"), status=error)
         with pytest.raises(PlatformNotReady):
             await foobot.async_setup_platform(
-                hass, {"sensor": VALID_CONFIG}, fake_async_add_entities
+                hass, VALID_CONFIG, fake_async_add_entities
             )

@@ -1,11 +1,13 @@
 """Top level class for AuroraABBPowerOneSolarPV inverters and sensors."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 import logging
+from typing import Any
 
 from aurorapy.client import AuroraSerialClient
 
-from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.entity import DeviceInfo, Entity
 
 from .const import (
     ATTR_DEVICE_NAME,
@@ -20,10 +22,10 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-class AuroraDevice(Entity):
+class AuroraEntity(Entity):
     """Representation of an Aurora ABB PowerOne device."""
 
-    def __init__(self, client: AuroraSerialClient, data) -> None:
+    def __init__(self, client: AuroraSerialClient, data: Mapping[str, Any]) -> None:
         """Initialise the basic device."""
         self._data = data
         self.type = "device"
@@ -33,8 +35,7 @@ class AuroraDevice(Entity):
     @property
     def unique_id(self) -> str | None:
         """Return the unique id for this device."""
-        serial = self._data.get(ATTR_SERIAL_NUMBER)
-        if serial is None:
+        if (serial := self._data.get(ATTR_SERIAL_NUMBER)) is None:
             return None
         return f"{serial}_{self.entity_description.key}"
 
@@ -44,7 +45,7 @@ class AuroraDevice(Entity):
         return self._available
 
     @property
-    def device_info(self):
+    def device_info(self) -> DeviceInfo:
         """Return device specific attributes."""
         return {
             "identifiers": {(DOMAIN, self._data[ATTR_SERIAL_NUMBER])},

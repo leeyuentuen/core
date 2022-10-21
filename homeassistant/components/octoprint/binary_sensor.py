@@ -36,10 +36,10 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class OctoPrintBinarySensorBase(CoordinatorEntity, BinarySensorEntity):
+class OctoPrintBinarySensorBase(
+    CoordinatorEntity[OctoprintDataUpdateCoordinator], BinarySensorEntity
+):
     """Representation an OctoPrint binary sensor."""
-
-    coordinator: OctoprintDataUpdateCoordinator
 
     def __init__(
         self,
@@ -61,8 +61,7 @@ class OctoPrintBinarySensorBase(CoordinatorEntity, BinarySensorEntity):
     @property
     def is_on(self):
         """Return true if binary sensor is on."""
-        printer = self.coordinator.data["printer"]
-        if not printer:
+        if not (printer := self.coordinator.data["printer"]):
             return None
 
         return bool(self._get_flag_state(printer))

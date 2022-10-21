@@ -5,18 +5,12 @@ from collections.abc import Mapping
 from typing import Any, cast
 
 from homeassistant.components.sensor import (
-    STATE_CLASS_MEASUREMENT,
     SensorEntity,
     SensorEntityDescription,
+    SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    ATTR_ATTRIBUTION,
-    ATTR_LATITUDE,
-    ATTR_LONGITUDE,
-    MASS_POUNDS,
-    PERCENTAGE,
-)
+from homeassistant.const import ATTR_LATITUDE, ATTR_LONGITUDE, MASS_POUNDS, PERCENTAGE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
@@ -29,13 +23,10 @@ from .const import (
     CONF_BALANCING_AUTHORITY,
     CONF_BALANCING_AUTHORITY_ABBREV,
     CONF_SHOW_ON_MAP,
-    DATA_COORDINATOR,
     DOMAIN,
 )
 
 ATTR_BALANCING_AUTHORITY = "balancing_authority"
-
-DEFAULT_ATTRIBUTION = "Pickup data provided by WattTime"
 
 SENSOR_TYPE_REALTIME_EMISSIONS_MOER = "moer"
 SENSOR_TYPE_REALTIME_EMISSIONS_PERCENT = "percent"
@@ -44,17 +35,17 @@ SENSOR_TYPE_REALTIME_EMISSIONS_PERCENT = "percent"
 REALTIME_EMISSIONS_SENSOR_DESCRIPTIONS = (
     SensorEntityDescription(
         key=SENSOR_TYPE_REALTIME_EMISSIONS_MOER,
-        name="Marginal Operating Emissions Rate",
+        name="Marginal operating emissions rate",
         icon="mdi:blur",
         native_unit_of_measurement=f"{MASS_POUNDS} CO2/MWh",
-        state_class=STATE_CLASS_MEASUREMENT,
+        state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
         key=SENSOR_TYPE_REALTIME_EMISSIONS_PERCENT,
-        name="Relative Marginal Emissions Intensity",
+        name="Relative marginal emissions intensity",
         icon="mdi:blur",
         native_unit_of_measurement=PERCENTAGE,
-        state_class=STATE_CLASS_MEASUREMENT,
+        state_class=SensorStateClass.MEASUREMENT,
     ),
 )
 
@@ -63,7 +54,7 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up WattTime sensors based on a config entry."""
-    coordinator = hass.data[DOMAIN][entry.entry_id][DATA_COORDINATOR]
+    coordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
         [
             RealtimeEmissionsSensor(coordinator, entry, description)
@@ -75,6 +66,8 @@ async def async_setup_entry(
 
 class RealtimeEmissionsSensor(CoordinatorEntity, SensorEntity):
     """Define a realtime emissions sensor."""
+
+    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -96,7 +89,6 @@ class RealtimeEmissionsSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> Mapping[str, Any] | None:
         """Return entity specific state attributes."""
         attrs = {
-            ATTR_ATTRIBUTION: DEFAULT_ATTRIBUTION,
             ATTR_BALANCING_AUTHORITY: self._entry.data[CONF_BALANCING_AUTHORITY],
         }
 

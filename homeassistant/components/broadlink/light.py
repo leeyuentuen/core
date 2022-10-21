@@ -1,5 +1,6 @@
 """Support for Broadlink lights."""
 import logging
+from typing import Any
 
 from broadlink.exceptions import BroadlinkException
 
@@ -8,12 +9,12 @@ from homeassistant.components.light import (
     ATTR_COLOR_MODE,
     ATTR_COLOR_TEMP,
     ATTR_HS_COLOR,
-    COLOR_MODE_BRIGHTNESS,
-    COLOR_MODE_COLOR_TEMP,
-    COLOR_MODE_HS,
-    COLOR_MODE_UNKNOWN,
+    ColorMode,
     LightEntity,
 )
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .entity import BroadlinkEntity
@@ -25,12 +26,17 @@ BROADLINK_COLOR_MODE_WHITE = 1
 BROADLINK_COLOR_MODE_SCENES = 2
 
 
-async def async_setup_entry(hass, config_entry, async_add_entities):
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
     """Set up the Broadlink light."""
     device = hass.data[DOMAIN].devices[config_entry.entry_id]
+    lights = []
 
-    if device.api.type == "LB1":
-        lights = [BroadlinkLight(device)]
+    if device.api.type in {"LB1", "LB2"}:
+        lights.append(BroadlinkLight(device))
 
     async_add_entities(lights)
 
@@ -48,11 +54,11 @@ class BroadlinkLight(BroadlinkEntity, LightEntity):
         data = self._coordinator.data
 
         if {"hue", "saturation"}.issubset(data):
-            self._attr_supported_color_modes.add(COLOR_MODE_HS)
+            self._attr_supported_color_modes.add(ColorMode.HS)
         if "colortemp" in data:
-            self._attr_supported_color_modes.add(COLOR_MODE_COLOR_TEMP)
+            self._attr_supported_color_modes.add(ColorMode.COLOR_TEMP)
         if not self.supported_color_modes:
-            self._attr_supported_color_modes = {COLOR_MODE_BRIGHTNESS}
+            self._attr_supported_color_modes = {ColorMode.BRIGHTNESS}
 
         self._update_state(data)
 
@@ -64,8 +70,8 @@ class BroadlinkLight(BroadlinkEntity, LightEntity):
         if "brightness" in data:
             self._attr_brightness = round(data["brightness"] * 2.55)
 
-        if self.supported_color_modes == {COLOR_MODE_BRIGHTNESS}:
-            self._attr_color_mode = COLOR_MODE_BRIGHTNESS
+        if self.supported_color_modes == {ColorMode.BRIGHTNESS}:
+            self._attr_color_mode = ColorMode.BRIGHTNESS
             return
 
         if {"hue", "saturation"}.issubset(data):
@@ -76,14 +82,14 @@ class BroadlinkLight(BroadlinkEntity, LightEntity):
 
         if "bulb_colormode" in data:
             if data["bulb_colormode"] == BROADLINK_COLOR_MODE_RGB:
-                self._attr_color_mode = COLOR_MODE_HS
+                self._attr_color_mode = ColorMode.HS
             elif data["bulb_colormode"] == BROADLINK_COLOR_MODE_WHITE:
-                self._attr_color_mode = COLOR_MODE_COLOR_TEMP
+                self._attr_color_mode = ColorMode.COLOR_TEMP
             else:
                 # Scenes are not yet supported.
-                self._attr_color_mode = COLOR_MODE_UNKNOWN
+                self._attr_color_mode = ColorMode.UNKNOWN
 
-    async def async_turn_on(self, **kwargs):
+    async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the light."""
         state = {"pwr": 1}
 
@@ -91,7 +97,7 @@ class BroadlinkLight(BroadlinkEntity, LightEntity):
             brightness = kwargs[ATTR_BRIGHTNESS]
             state["brightness"] = round(brightness / 2.55)
 
-        if self.supported_color_modes == {COLOR_MODE_BRIGHTNESS}:
+        if self.supported_color_modes == {ColorMode.BRIGHTNESS}:
             state["bulb_colormode"] = BROADLINK_COLOR_MODE_WHITE
 
         elif ATTR_HS_COLOR in kwargs:
@@ -107,9 +113,9 @@ class BroadlinkLight(BroadlinkEntity, LightEntity):
 
         elif ATTR_COLOR_MODE in kwargs:
             color_mode = kwargs[ATTR_COLOR_MODE]
-            if color_mode == COLOR_MODE_HS:
+            if color_mode == ColorMode.HS:
                 state["bulb_colormode"] = BROADLINK_COLOR_MODE_RGB
-            elif color_mode == COLOR_MODE_COLOR_TEMP:
+            elif color_mode == ColorMode.COLOR_TEMP:
                 state["bulb_colormode"] = BROADLINK_COLOR_MODE_WHITE
             else:
                 # Scenes are not yet supported.
@@ -117,20 +123,19 @@ class BroadlinkLight(BroadlinkEntity, LightEntity):
 
         await self._async_set_state(state)
 
-    async def async_turn_off(self, **kwargs):
+    async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the light."""
         await self._async_set_state({"pwr": 0})
 
     async def _async_set_state(self, state):
         """Set the state of the light."""
+        device = self._device
+
         try:
-            state = await self._device.async_request(
-                self._device.api.set_state, **state
-            )
+            state = await device.async_request(device.api.set_state, **state)
         except (BroadlinkException, OSError) as err:
             _LOGGER.error("Failed to set state: %s", err)
-            return False
+            return
 
         self._update_state(state)
         self.async_write_ha_state()
-        return True

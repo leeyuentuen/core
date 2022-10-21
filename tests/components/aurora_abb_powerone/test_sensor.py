@@ -2,7 +2,7 @@
 from datetime import timedelta
 from unittest.mock import patch
 
-from aurorapy.client import AuroraError
+from aurorapy.client import AuroraError, AuroraTimeoutError
 
 from homeassistant.components.aurora_abb_powerone.const import (
     ATTR_DEVICE_NAME,
@@ -12,16 +12,10 @@ from homeassistant.components.aurora_abb_powerone.const import (
     DEFAULT_INTEGRATION_TITLE,
     DOMAIN,
 )
-from homeassistant.config_entries import SOURCE_IMPORT
 from homeassistant.const import CONF_ADDRESS, CONF_PORT
-from homeassistant.setup import async_setup_component
 import homeassistant.util.dt as dt_util
 
-from tests.common import (
-    MockConfigEntry,
-    assert_setup_component,
-    async_fire_time_changed,
-)
+from tests.common import MockConfigEntry, async_fire_time_changed
 
 TEST_CONFIG = {
     "sensor": {
@@ -56,47 +50,8 @@ def _mock_config_entry():
         },
         source="dummysource",
         entry_id="13579",
+        unique_id="654321",
     )
-
-
-async def test_setup_platform_valid_config(hass):
-    """Test that (deprecated) yaml import still works."""
-    with patch("aurorapy.client.AuroraSerialClient.connect", return_value=None), patch(
-        "aurorapy.client.AuroraSerialClient.measure",
-        side_effect=_simulated_returns,
-    ), patch(
-        "aurorapy.client.AuroraSerialClient.serial_number",
-        return_value="9876543",
-    ), patch(
-        "aurorapy.client.AuroraSerialClient.version",
-        return_value="9.8.7.6",
-    ), patch(
-        "aurorapy.client.AuroraSerialClient.pn",
-        return_value="A.B.C",
-    ), patch(
-        "aurorapy.client.AuroraSerialClient.firmware",
-        return_value="1.234",
-    ), patch(
-        "aurorapy.client.AuroraSerialClient.cumulated_energy",
-        side_effect=_simulated_returns,
-    ), assert_setup_component(
-        1, "sensor"
-    ):
-        assert await async_setup_component(hass, "sensor", TEST_CONFIG)
-        await hass.async_block_till_done()
-    power = hass.states.get("sensor.power_output")
-    assert power
-    assert power.state == "45.7"
-
-    # try to set up a second time - should abort.
-
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN,
-        data=TEST_CONFIG,
-        context={"source": SOURCE_IMPORT},
-    )
-    assert result["type"] == "abort"
-    assert result["reason"] == "already_setup"
 
 
 async def test_sensors(hass):
@@ -171,7 +126,7 @@ async def test_sensor_dark(hass):
     # sunset
     with patch("aurorapy.client.AuroraSerialClient.connect", return_value=None), patch(
         "aurorapy.client.AuroraSerialClient.measure",
-        side_effect=AuroraError("No response after 10 seconds"),
+        side_effect=AuroraTimeoutError("No response after 10 seconds"),
     ):
         async_fire_time_changed(hass, utcnow + timedelta(seconds=60))
         await hass.async_block_till_done()
@@ -189,7 +144,7 @@ async def test_sensor_dark(hass):
     # sunset
     with patch("aurorapy.client.AuroraSerialClient.connect", return_value=None), patch(
         "aurorapy.client.AuroraSerialClient.measure",
-        side_effect=AuroraError("No response after 10 seconds"),
+        side_effect=AuroraTimeoutError("No response after 10 seconds"),
     ):
         async_fire_time_changed(hass, utcnow + timedelta(seconds=60))
         await hass.async_block_till_done()

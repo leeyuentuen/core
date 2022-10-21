@@ -29,8 +29,9 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
+from .const import MOCK_VEHICLES
+
 from tests.common import load_fixture
-from tests.components.renault.const import MOCK_VEHICLES
 
 pytestmark = pytest.mark.usefixtures("patch_renault_account", "patch_get_vehicles")
 
@@ -236,7 +237,9 @@ async def test_service_set_charge_schedule_multi(
     assert mock_action.mock_calls[0][1] == (mock_call_data,)
 
 
-async def test_service_set_charge_start(hass: HomeAssistant, config_entry: ConfigEntry):
+async def test_service_set_charge_start(
+    hass: HomeAssistant, config_entry: ConfigEntry, caplog: pytest.LogCaptureFixture
+):
     """Test that service invokes renault_api with correct data."""
     await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
@@ -258,6 +261,7 @@ async def test_service_set_charge_start(hass: HomeAssistant, config_entry: Confi
         )
     assert len(mock_action.mock_calls) == 1
     assert mock_action.mock_calls[0][1] == ()
+    assert f"'{DOMAIN}.{SERVICE_CHARGE_START}' service is deprecated" in caplog.text
 
 
 async def test_service_invalid_device_id(

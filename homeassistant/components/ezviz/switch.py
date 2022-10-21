@@ -1,4 +1,4 @@
-"""Support for Ezviz Switch sensors."""
+"""Support for EZVIZ Switch sensors."""
 from __future__ import annotations
 
 from typing import Any
@@ -6,7 +6,7 @@ from typing import Any
 from pyezviz.constants import DeviceSwitchType
 from pyezviz.exceptions import HTTPError, PyEzvizError
 
-from homeassistant.components.switch import DEVICE_CLASS_SWITCH, SwitchEntity
+from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -19,7 +19,7 @@ from .entity import EzvizEntity
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Set up Ezviz switch based on a config entry."""
+    """Set up EZVIZ switch based on a config entry."""
     coordinator: EzvizDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id][
         DATA_COORDINATOR
     ]
@@ -37,10 +37,9 @@ async def async_setup_entry(
 
 
 class EzvizSwitch(EzvizEntity, SwitchEntity):
-    """Representation of a Ezviz sensor."""
+    """Representation of a EZVIZ sensor."""
 
-    coordinator: EzvizDataUpdateCoordinator
-    ATTR_DEVICE_CLASS = DEVICE_CLASS_SWITCH
+    _attr_device_class = SwitchDeviceClass.SWITCH
 
     def __init__(
         self, coordinator: EzvizDataUpdateCoordinator, serial: str, switch: str
@@ -66,7 +65,7 @@ class EzvizSwitch(EzvizEntity, SwitchEntity):
             )
 
         except (HTTPError, PyEzvizError) as err:
-            raise PyEzvizError("Failed to turn on switch {self._name}") from err
+            raise PyEzvizError(f"Failed to turn on switch {self._name}") from err
 
         if update_ok:
             await self.coordinator.async_request_refresh()

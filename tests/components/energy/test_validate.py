@@ -4,9 +4,13 @@ from unittest.mock import patch
 import pytest
 
 from homeassistant.components.energy import async_get_manager, validate
+from homeassistant.const import (
+    ENERGY_KILO_WATT_HOUR,
+    ENERGY_MEGA_WATT_HOUR,
+    ENERGY_WATT_HOUR,
+)
+from homeassistant.helpers.json import JSON_DUMP
 from homeassistant.setup import async_setup_component
-
-from tests.common import async_init_recorder_component
 
 
 @pytest.fixture
@@ -26,19 +30,26 @@ def mock_get_metadata():
     """Mock recorder.statistics.get_metadata."""
     mocks = {}
 
+    def _get_metadata(_hass, *, statistic_ids):
+        result = {}
+        for statistic_id in statistic_ids:
+            if statistic_id in mocks:
+                if mocks[statistic_id] is not None:
+                    result[statistic_id] = mocks[statistic_id]
+            else:
+                result[statistic_id] = (1, {})
+        return result
+
     with patch(
         "homeassistant.components.recorder.statistics.get_metadata",
-        side_effect=lambda hass, statistic_ids: mocks.get(
-            statistic_ids[0], {statistic_ids[0]: (1, {})}
-        ),
+        wraps=_get_metadata,
     ):
         yield mocks
 
 
 @pytest.fixture(autouse=True)
-async def mock_energy_manager(hass):
+async def mock_energy_manager(hass, recorder_mock):
     """Set up energy."""
-    await async_init_recorder_component(hass)
     assert await async_setup_component(hass, "energy", {"energy": {}})
     manager = await async_get_manager(hass)
     manager.data = manager.default_preferences()
@@ -54,16 +65,18 @@ async def test_validation_empty_config(hass):
 
 
 @pytest.mark.parametrize(
-    "state_class, extra",
+    "state_class, energy_unit, extra",
     [
-        ("total_increasing", {}),
-        ("total", {}),
-        ("total", {"last_reset": "abc"}),
-        ("measurement", {"last_reset": "abc"}),
+        ("total_increasing", ENERGY_KILO_WATT_HOUR, {}),
+        ("total_increasing", ENERGY_MEGA_WATT_HOUR, {}),
+        ("total_increasing", ENERGY_WATT_HOUR, {}),
+        ("total", ENERGY_KILO_WATT_HOUR, {}),
+        ("total", ENERGY_KILO_WATT_HOUR, {"last_reset": "abc"}),
+        ("measurement", ENERGY_KILO_WATT_HOUR, {"last_reset": "abc"}),
     ],
 )
 async def test_validation(
-    hass, mock_energy_manager, mock_get_metadata, state_class, extra
+    hass, mock_energy_manager, mock_get_metadata, state_class, energy_unit, extra
 ):
     """Test validating success."""
     for key in ("device_cons", "battery_import", "battery_export", "solar_production"):
@@ -72,7 +85,7 @@ async def test_validation(
             "123",
             {
                 "device_class": "energy",
-                "unit_of_measurement": "kWh",
+                "unit_of_measurement": energy_unit,
                 "state_class": state_class,
                 **extra,
             },
@@ -361,8 +374,8 @@ async def test_validation_grid(
     """Test validating grid with sensors for energy and cost/compensation."""
     mock_is_entity_recorded["sensor.grid_cost_1"] = False
     mock_is_entity_recorded["sensor.grid_compensation_1"] = False
-    mock_get_metadata["sensor.grid_cost_1"] = {}
-    mock_get_metadata["sensor.grid_compensation_1"] = {}
+    mock_get_metadata["sensor.grid_cost_1"] = None
+    mock_get_metadata["sensor.grid_compensation_1"] = None
     await mock_energy_manager.async_update(
         {
             "energy_sources": [
@@ -403,7 +416,11 @@ async def test_validation_grid(
         },
     )
 
-    assert (await validate.async_validate(hass)).as_dict() == {
+    result = await validate.async_validate(hass)
+    # verify its also json serializable
+    JSON_DUMP(result)
+
+    assert result.as_dict() == {
         "energy_sources": [
             [
                 {
@@ -456,8 +473,8 @@ async def test_validation_grid_external_cost_compensation(
     hass, mock_energy_manager, mock_is_entity_recorded, mock_get_metadata
 ):
     """Test validating grid with non entity stats for energy and cost/compensation."""
-    mock_get_metadata["external:grid_cost_1"] = {}
-    mock_get_metadata["external:grid_compensation_1"] = {}
+    mock_get_metadata["external:grid_cost_1"] = None
+    mock_get_metadata["external:grid_compensation_1"] = None
     await mock_energy_manager.async_update(
         {
             "energy_sources": [
@@ -563,7 +580,6 @@ async def test_validation_grid_price_not_exist(
                     "flow_from": [
                         {
                             "stat_energy_from": "sensor.grid_consumption_1",
-                            "entity_energy_from": "sensor.grid_consumption_1",
                             "entity_energy_price": "sensor.grid_price_1",
                             "number_energy_price": None,
                         }
@@ -571,7 +587,6 @@ async def test_validation_grid_price_not_exist(
                     "flow_to": [
                         {
                             "stat_energy_to": "sensor.grid_production_1",
-                            "entity_energy_to": "sensor.grid_production_1",
                             "entity_energy_price": None,
                             "number_energy_price": 0.10,
                         }
@@ -640,7 +655,6 @@ async def test_validation_grid_auto_cost_entity_errors(
                     "flow_from": [
                         {
                             "stat_energy_from": "sensor.grid_consumption_1",
-                            "entity_energy_from": None,
                             "entity_energy_price": None,
                             "number_energy_price": 0.20,
                         }
@@ -648,7 +662,6 @@ async def test_validation_grid_auto_cost_entity_errors(
                     "flow_to": [
                         {
                             "stat_energy_to": "sensor.grid_production_1",
-                            "entity_energy_to": "invalid",
                             "entity_energy_price": None,
                             "number_energy_price": 0.10,
                         }
@@ -714,7 +727,6 @@ async def test_validation_grid_price_errors(
                     "flow_from": [
                         {
                             "stat_energy_from": "sensor.grid_consumption_1",
-                            "entity_energy_from": "sensor.grid_consumption_1",
                             "entity_energy_price": "sensor.grid_price_1",
                             "number_energy_price": None,
                         }
@@ -761,13 +773,11 @@ async def test_validation_gas(
                 {
                     "type": "gas",
                     "stat_energy_from": "sensor.gas_consumption_4",
-                    "entity_energy_from": "sensor.gas_consumption_4",
                     "entity_energy_price": "sensor.gas_price_1",
                 },
                 {
                     "type": "gas",
                     "stat_energy_from": "sensor.gas_consumption_3",
-                    "entity_energy_from": "sensor.gas_consumption_3",
                     "entity_energy_price": "sensor.gas_price_2",
                 },
             ]
@@ -873,7 +883,6 @@ async def test_validation_gas_no_costs_tracking(
                     "type": "gas",
                     "stat_energy_from": "sensor.gas_consumption_1",
                     "stat_cost": None,
-                    "entity_energy_from": None,
                     "entity_energy_price": None,
                     "number_energy_price": None,
                 },
@@ -909,7 +918,6 @@ async def test_validation_grid_no_costs_tracking(
                         {
                             "stat_energy_from": "sensor.grid_energy",
                             "stat_cost": None,
-                            "entity_energy_from": "sensor.grid_energy",
                             "entity_energy_price": None,
                             "number_energy_price": None,
                         },
@@ -918,7 +926,6 @@ async def test_validation_grid_no_costs_tracking(
                         {
                             "stat_energy_to": "sensor.grid_energy",
                             "stat_cost": None,
-                            "entity_energy_to": "sensor.grid_energy",
                             "entity_energy_price": None,
                             "number_energy_price": None,
                         },

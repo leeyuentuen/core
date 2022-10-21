@@ -1,6 +1,7 @@
 """Collection of test helpers."""
 from datetime import datetime
 from fractions import Fraction
+import functools
 from functools import partial
 import io
 
@@ -8,6 +9,11 @@ import av
 import numpy as np
 
 from homeassistant.components.stream.core import Segment
+from homeassistant.components.stream.fmp4utils import (
+    TRANSFORM_MATRIX_TOP,
+    XYW_ROW,
+    find_box,
+)
 
 FAKE_TIME = datetime.utcnow()
 # Segment with defaults filled in for use in tests
@@ -23,6 +29,11 @@ DefaultSegment = partial(
 AUDIO_SAMPLE_RATE = 8000
 
 
+def stream_teardown():
+    """Perform test teardown."""
+    frame_image_data.cache_clear()
+
+
 def generate_audio_frame(pcm_mulaw=False):
     """Generate a blank audio frame."""
     if pcm_mulaw:
@@ -35,6 +46,19 @@ def generate_audio_frame(pcm_mulaw=False):
     audio_frame.sample_rate = AUDIO_SAMPLE_RATE
     audio_frame.time_base = Fraction(1, AUDIO_SAMPLE_RATE)
     return audio_frame
+
+
+@functools.lru_cache(maxsize=1024)
+def frame_image_data(frame_i, total_frames):
+    """Generate image content for a frame of a video."""
+    img = np.empty((480, 320, 3))
+    img[:, :, 0] = 0.5 + 0.5 * np.sin(2 * np.pi * (0 / 3 + frame_i / total_frames))
+    img[:, :, 1] = 0.5 + 0.5 * np.sin(2 * np.pi * (1 / 3 + frame_i / total_frames))
+    img[:, :, 2] = 0.5 + 0.5 * np.sin(2 * np.pi * (2 / 3 + frame_i / total_frames))
+
+    img = np.round(255 * img).astype(np.uint8)
+    img = np.clip(img, 0, 255)
+    return img
 
 
 def generate_video(encoder, container_format, duration):
@@ -58,15 +82,7 @@ def generate_video(encoder, container_format, duration):
     stream.options.update({"g": str(fps), "keyint_min": str(fps)})
 
     for frame_i in range(total_frames):
-
-        img = np.empty((480, 320, 3))
-        img[:, :, 0] = 0.5 + 0.5 * np.sin(2 * np.pi * (0 / 3 + frame_i / total_frames))
-        img[:, :, 1] = 0.5 + 0.5 * np.sin(2 * np.pi * (1 / 3 + frame_i / total_frames))
-        img[:, :, 2] = 0.5 + 0.5 * np.sin(2 * np.pi * (2 / 3 + frame_i / total_frames))
-
-        img = np.round(255 * img).astype(np.uint8)
-        img = np.clip(img, 0, 255)
-
+        img = frame_image_data(frame_i, total_frames)
         frame = av.VideoFrame.from_ndarray(img, format="rgb24")
         for packet in stream.encode(frame):
             container.mux(packet)
@@ -139,3 +155,18 @@ def remux_with_audio(source, container_format, audio_codec):
     output.seek(0)
 
     return output
+
+
+def assert_mp4_has_transform_matrix(mp4: bytes, orientation: int):
+    """Assert that the mp4 (or init) has the proper transformation matrix."""
+    # Find moov
+    moov_location = next(find_box(mp4, b"moov"))
+    mvhd_location = next(find_box(mp4, b"trak", moov_location))
+    tkhd_location = next(find_box(mp4, b"tkhd", mvhd_location))
+    tkhd_length = int.from_bytes(
+        mp4[tkhd_location : tkhd_location + 4], byteorder="big"
+    )
+    assert (
+        mp4[tkhd_location + tkhd_length - 44 : tkhd_location + tkhd_length - 8]
+        == TRANSFORM_MATRIX_TOP[orientation] + XYW_ROW
+    )
