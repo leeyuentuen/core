@@ -49,17 +49,19 @@ from homeassistant.const import (
     PRECISION_HALVES,
     PRECISION_TENTHS,
     PRECISION_WHOLE,
-    TEMP_CELSIUS,
+    UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import (
+from .entity import (
     EsphomeEntity,
-    EsphomeEnumMapper,
     esphome_state_property,
     platform_async_setup_entry,
 )
+from .enum_mapper import EsphomeEnumMapper
+
+FAN_QUIET = "quiet"
 
 
 async def async_setup_entry(
@@ -70,7 +72,6 @@ async def async_setup_entry(
         hass,
         entry,
         async_add_entities,
-        component_key="climate",
         info_type=ClimateInfo,
         entity_type=EsphomeClimateEntity,
         state_type=ClimateState,
@@ -109,6 +110,7 @@ _FAN_MODES: EsphomeEnumMapper[ClimateFanMode, str] = EsphomeEnumMapper(
         ClimateFanMode.MIDDLE: FAN_MIDDLE,
         ClimateFanMode.FOCUS: FAN_FOCUS,
         ClimateFanMode.DIFFUSE: FAN_DIFFUSE,
+        ClimateFanMode.QUIET: FAN_QUIET,
     }
 )
 _SWING_MODES: EsphomeEnumMapper[ClimateSwingMode, str] = EsphomeEnumMapper(
@@ -136,20 +138,24 @@ _PRESETS: EsphomeEnumMapper[ClimatePreset, str] = EsphomeEnumMapper(
 class EsphomeClimateEntity(EsphomeEntity[ClimateInfo, ClimateState], ClimateEntity):
     """A climate implementation for ESPHome."""
 
-    _attr_temperature_unit = TEMP_CELSIUS
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
 
     @property
     def precision(self) -> float:
         """Return the precision of the climate device."""
         precicions = [PRECISION_WHOLE, PRECISION_HALVES, PRECISION_TENTHS]
+        if self._static_info.visual_current_temperature_step != 0:
+            step = self._static_info.visual_current_temperature_step
+        else:
+            step = self._static_info.visual_target_temperature_step
         for prec in precicions:
-            if self._static_info.visual_temperature_step >= prec:
+            if step >= prec:
                 return prec
         # Fall back to highest precision, tenths
         return PRECISION_TENTHS
 
     @property
-    def hvac_modes(self) -> list[str]:
+    def hvac_modes(self) -> list[HVACMode]:
         """Return the list of available operation modes."""
         return [
             _CLIMATE_MODES.from_esphome(mode)
@@ -184,7 +190,7 @@ class EsphomeClimateEntity(EsphomeEntity[ClimateInfo, ClimateState], ClimateEnti
     def target_temperature_step(self) -> float:
         """Return the supported step of target temperature."""
         # Round to one digit because of floating point math
-        return round(self._static_info.visual_temperature_step, 1)
+        return round(self._static_info.visual_target_temperature_step, 1)
 
     @property
     def min_temp(self) -> float:
@@ -197,9 +203,9 @@ class EsphomeClimateEntity(EsphomeEntity[ClimateInfo, ClimateState], ClimateEnti
         return self._static_info.visual_max_temperature
 
     @property
-    def supported_features(self) -> int:
+    def supported_features(self) -> ClimateEntityFeature:
         """Return the list of supported features."""
-        features = 0
+        features = ClimateEntityFeature(0)
         if self._static_info.supports_two_point_target_temperature:
             features |= ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
         else:
@@ -214,13 +220,13 @@ class EsphomeClimateEntity(EsphomeEntity[ClimateInfo, ClimateState], ClimateEnti
 
     @property
     @esphome_state_property
-    def hvac_mode(self) -> str | None:
+    def hvac_mode(self) -> HVACMode | None:
         """Return current operation ie. heat, cool, idle."""
         return _CLIMATE_MODES.from_esphome(self._state.mode)
 
     @property
     @esphome_state_property
-    def hvac_action(self) -> str | None:
+    def hvac_action(self) -> HVACAction | None:
         """Return current action."""
         # HA has no support feature field for hvac_action
         if not self._static_info.supports_action:

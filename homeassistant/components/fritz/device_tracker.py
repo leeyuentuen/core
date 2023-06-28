@@ -4,8 +4,7 @@ from __future__ import annotations
 import datetime
 import logging
 
-from homeassistant.components.device_tracker import SourceType
-from homeassistant.components.device_tracker.config_entry import ScannerEntity
+from homeassistant.components.device_tracker import ScannerEntity, SourceType
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
@@ -21,9 +20,6 @@ from .common import (
 from .const import DATA_FRITZ, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-
-YAML_DEFAULT_HOST = "169.254.1.1"
-YAML_DEFAULT_USERNAME = "admin"
 
 
 async def async_setup_entry(
@@ -69,7 +65,7 @@ def _async_add_entities(
 
 
 class FritzBoxTracker(FritzDeviceBase, ScannerEntity):
-    """This class queries a FRITZ!Box device."""
+    """Class which queries a FRITZ!Box device."""
 
     def __init__(self, avm_wrapper: AvmWrapper, device: FritzDevice) -> None:
         """Initialize a FRITZ!Box device."""
