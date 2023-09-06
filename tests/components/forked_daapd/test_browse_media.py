@@ -1,7 +1,8 @@
 """Media browsing tests for the forked_daapd media player platform."""
-
 from http import HTTPStatus
 from unittest.mock import patch
+
+import pytest
 
 from homeassistant.components import media_source, spotify
 from homeassistant.components.forked_daapd.browse_media import (
@@ -14,12 +15,17 @@ from homeassistant.components.spotify.const import (
     MEDIA_PLAYER_PREFIX as SPOTIFY_MEDIA_PLAYER_PREFIX,
 )
 from homeassistant.components.websocket_api.const import TYPE_RESULT
+from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 
-TEST_MASTER_ENTITY_NAME = "media_player.forked_daapd_server"
+from tests.typing import ClientSessionGenerator, WebSocketGenerator
+
+TEST_MASTER_ENTITY_NAME = "media_player.owntone_server"
 
 
-async def test_async_browse_media(hass, hass_ws_client, config_entry):
+async def test_async_browse_media(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator, config_entry
+) -> None:
     """Test browse media."""
 
     assert await async_setup_component(hass, media_source.DOMAIN, {})
@@ -29,6 +35,7 @@ async def test_async_browse_media(hass, hass_ws_client, config_entry):
         "homeassistant.components.forked_daapd.media_player.ForkedDaapdAPI",
         autospec=True,
     ) as mock_api:
+        mock_api.return_value.get_request.return_value = {"websocket_port": 2}
         config_entry.add_to_hass(hass)
         await hass.config_entries.async_setup(config_entry.entry_id)
         await hass.async_block_till_done()
@@ -171,7 +178,7 @@ async def test_async_browse_media(hass, hass_ws_client, config_entry):
             """Browse the children of this BrowseMedia."""
             nonlocal msg_id
             for child in children:
-                # Assert Spotify content is not passed through as Owntone media
+                # Assert Spotify content is not passed through as OwnTone media
                 assert not (
                     is_owntone_media_content_id(child["media_content_id"])
                     and "Spotify" in MediaContent(child["media_content_id"]).title
@@ -194,7 +201,9 @@ async def test_async_browse_media(hass, hass_ws_client, config_entry):
         await browse_children(msg["result"]["children"])
 
 
-async def test_async_browse_media_not_found(hass, hass_ws_client, config_entry):
+async def test_async_browse_media_not_found(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator, config_entry
+) -> None:
     """Test browse media not found."""
 
     assert await async_setup_component(hass, media_source.DOMAIN, {})
@@ -204,6 +213,7 @@ async def test_async_browse_media_not_found(hass, hass_ws_client, config_entry):
         "homeassistant.components.forked_daapd.media_player.ForkedDaapdAPI",
         autospec=True,
     ) as mock_api:
+        mock_api.return_value.get_request.return_value = {"websocket_port": 2}
         config_entry.add_to_hass(hass)
         await hass.config_entries.async_setup(config_entry.entry_id)
         await hass.async_block_till_done()
@@ -249,13 +259,15 @@ async def test_async_browse_media_not_found(hass, hass_ws_client, config_entry):
             msg_id += 1
 
 
-async def test_async_browse_spotify(hass, hass_ws_client, config_entry):
+async def test_async_browse_spotify(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator, config_entry
+) -> None:
     """Test browsing spotify."""
 
     assert await async_setup_component(hass, spotify.DOMAIN, {})
     await hass.async_block_till_done()
     config_entry.add_to_hass(hass)
-    await config_entry.async_setup(hass)
+    await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     with patch(
         "homeassistant.components.forked_daapd.media_player.spotify_async_browse_media"
@@ -299,13 +311,64 @@ async def test_async_browse_spotify(hass, hass_ws_client, config_entry):
         assert msg["success"]
 
 
-async def test_async_browse_image(hass, hass_client, config_entry):
+async def test_async_browse_media_source(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator, config_entry
+) -> None:
+    """Test browsing media_source."""
+
+    config_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    with patch(
+        "homeassistant.components.forked_daapd.media_player.media_source.async_browse_media"
+    ) as mock_media_source_browse:
+        children = [
+            BrowseMedia(
+                title="Test mp3",
+                media_class=MediaClass.MUSIC,
+                media_content_id="media-source://test_dir/test.mp3",
+                media_content_type="audio/aac",
+                can_play=False,
+                can_expand=True,
+            )
+        ]
+        mock_media_source_browse.return_value = BrowseMedia(
+            title="Audio Folder",
+            media_class=MediaClass.DIRECTORY,
+            media_content_id="media-source://audio_folder",
+            media_content_type=MediaType.APP,
+            can_play=False,
+            can_expand=True,
+            children=children,
+        )
+
+        client = await hass_ws_client(hass)
+        await client.send_json(
+            {
+                "id": 1,
+                "type": "media_player/browse_media",
+                "entity_id": TEST_MASTER_ENTITY_NAME,
+                "media_content_type": MediaType.APP,
+                "media_content_id": "media-source://audio_folder",
+            }
+        )
+        msg = await client.receive_json()
+        # Assert WebSocket response
+        assert msg["id"] == 1
+        assert msg["type"] == TYPE_RESULT
+        assert msg["success"]
+
+
+async def test_async_browse_image(
+    hass: HomeAssistant, hass_client: ClientSessionGenerator, config_entry
+) -> None:
     """Test browse media images."""
 
     with patch(
         "homeassistant.components.forked_daapd.media_player.ForkedDaapdAPI",
         autospec=True,
     ) as mock_api:
+        mock_api.return_value.get_request.return_value = {"websocket_port": 2}
         config_entry.add_to_hass(hass)
         await hass.config_entries.async_setup(config_entry.entry_id)
         await hass.async_block_till_done()
@@ -333,7 +396,7 @@ async def test_async_browse_image(hass, hass_client, config_entry):
                 (MediaType.ARTIST, "3815427709949443149"),
                 (MediaType.TRACK, "456"),
             ):
-                mock_fetch_image.return_value = (b"image_bytes", media_type)
+                mock_fetch_image.return_value = (b"image_bytes", "image/jpeg")
                 media_content_id = create_media_content_id(
                     "title", media_type=media_type, id_or_path=media_id
                 )
@@ -345,17 +408,23 @@ async def test_async_browse_image(hass, hass_client, config_entry):
                     == f"http://owntone_instance/some_{media_type}_image"
                 )
                 assert resp.status == HTTPStatus.OK
-                assert resp.content_type == media_type
+                assert resp.content_type == "image/jpeg"
                 assert await resp.read() == b"image_bytes"
 
 
-async def test_async_browse_image_missing(hass, hass_client, config_entry, caplog):
+async def test_async_browse_image_missing(
+    hass: HomeAssistant,
+    hass_client: ClientSessionGenerator,
+    config_entry,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Test browse media images with no image available."""
 
     with patch(
         "homeassistant.components.forked_daapd.media_player.ForkedDaapdAPI",
         autospec=True,
     ) as mock_api:
+        mock_api.return_value.get_request.return_value = {"websocket_port": 2}
         config_entry.add_to_hass(hass)
         await hass.config_entries.async_setup(config_entry.entry_id)
         await hass.async_block_till_done()

@@ -1,7 +1,7 @@
 """Support for deCONZ lights."""
 from __future__ import annotations
 
-from typing import Any, TypedDict, TypeVar, Union
+from typing import Any, TypedDict, TypeVar
 
 from pydeconz.interfaces.groups import GroupHandler
 from pydeconz.interfaces.lights import LightHandler
@@ -29,7 +29,7 @@ from homeassistant.components.light import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.color import color_hs_to_xy
 
@@ -47,7 +47,7 @@ DECONZ_TO_COLOR_MODE = {
     LightColorMode.XY: ColorMode.XY,
 }
 
-_LightDeviceT = TypeVar("_LightDeviceT", bound=Union[Group, Light])
+_LightDeviceT = TypeVar("_LightDeviceT", bound=Group | Light)
 
 
 class SetStateAttributes(TypedDict, total=False):

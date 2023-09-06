@@ -1,5 +1,4 @@
-"""
-Test for Nest sensors platform for the Smart Device Management API.
+"""Test for Nest sensors platform for the Smart Device Management API.
 
 These tests fake out the subscriber/devicemanager, and are not using a real
 pubsub subscriber.
@@ -20,7 +19,8 @@ from homeassistant.const import (
     ATTR_FRIENDLY_NAME,
     ATTR_UNIT_OF_MEASUREMENT,
     PERCENTAGE,
-    TEMP_CELSIUS,
+    STATE_UNAVAILABLE,
+    UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -42,7 +42,7 @@ def device_traits() -> dict[str, Any]:
 
 async def test_thermostat_device(
     hass: HomeAssistant, create_device: CreateDevice, setup_platform: PlatformSetup
-):
+) -> None:
     """Test a thermostat with temperature and humidity sensors."""
     create_device.create(
         {
@@ -59,7 +59,10 @@ async def test_thermostat_device(
     temperature = hass.states.get("sensor.my_sensor_temperature")
     assert temperature is not None
     assert temperature.state == "25.1"
-    assert temperature.attributes.get(ATTR_UNIT_OF_MEASUREMENT) == TEMP_CELSIUS
+    assert (
+        temperature.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
+        == UnitOfTemperature.CELSIUS
+    )
     assert (
         temperature.attributes.get(ATTR_DEVICE_CLASS) == SensorDeviceClass.TEMPERATURE
     )
@@ -90,7 +93,59 @@ async def test_thermostat_device(
     assert device.identifiers == {("nest", DEVICE_ID)}
 
 
-async def test_no_devices(hass: HomeAssistant, setup_platform: PlatformSetup):
+async def test_thermostat_device_available(
+    hass: HomeAssistant, create_device: CreateDevice, setup_platform: PlatformSetup
+) -> None:
+    """Test a thermostat with temperature and humidity sensors that is Online."""
+    create_device.create(
+        {
+            "sdm.devices.traits.Temperature": {
+                "ambientTemperatureCelsius": 25.1,
+            },
+            "sdm.devices.traits.Humidity": {
+                "ambientHumidityPercent": 35.0,
+            },
+            "sdm.devices.traits.Connectivity": {"status": "ONLINE"},
+        }
+    )
+    await setup_platform()
+
+    temperature = hass.states.get("sensor.my_sensor_temperature")
+    assert temperature is not None
+    assert temperature.state == "25.1"
+
+    humidity = hass.states.get("sensor.my_sensor_humidity")
+    assert humidity is not None
+    assert humidity.state == "35"
+
+
+async def test_thermostat_device_unavailable(
+    hass: HomeAssistant, create_device: CreateDevice, setup_platform: PlatformSetup
+) -> None:
+    """Test a thermostat with temperature and humidity sensors that is Offline."""
+    create_device.create(
+        {
+            "sdm.devices.traits.Temperature": {
+                "ambientTemperatureCelsius": 25.1,
+            },
+            "sdm.devices.traits.Humidity": {
+                "ambientHumidityPercent": 35.0,
+            },
+            "sdm.devices.traits.Connectivity": {"status": "OFFLINE"},
+        }
+    )
+    await setup_platform()
+
+    temperature = hass.states.get("sensor.my_sensor_temperature")
+    assert temperature is not None
+    assert temperature.state == STATE_UNAVAILABLE
+
+    humidity = hass.states.get("sensor.my_sensor_humidity")
+    assert humidity is not None
+    assert humidity.state == STATE_UNAVAILABLE
+
+
+async def test_no_devices(hass: HomeAssistant, setup_platform: PlatformSetup) -> None:
     """Test no devices returned by the api."""
     await setup_platform()
 

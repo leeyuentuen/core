@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
-from switchbee.api import SwitchBeeDeviceOfflineError, SwitchBeeError
+from switchbee.api.central_unit import SwitchBeeDeviceOfflineError, SwitchBeeError
 from switchbee.device import ApiStateCommand, DeviceType, SwitchBeeDimmer
 
 from homeassistant.components.light import ATTR_BRIGHTNESS, ColorMode, LightEntity
@@ -71,10 +71,7 @@ class SwitchBeeLightEntity(SwitchBeeDeviceEntity[SwitchBeeDimmer], LightEntity):
         super()._handle_coordinator_update()
 
     def _update_attrs_from_coordinator(self) -> None:
-
-        coordinator_device = cast(
-            SwitchBeeDimmer, self.coordinator.data[self._device.id]
-        )
+        coordinator_device = self._get_coordinator_device()
         brightness = coordinator_device.brightness
 
         # module is offline
@@ -107,12 +104,14 @@ class SwitchBeeLightEntity(SwitchBeeDeviceEntity[SwitchBeeDimmer], LightEntity):
             ) from exp
 
         if not isinstance(state, int):
-            # We just turned the light on, still don't know the last brightness known the Central Unit (yet)
-            # the brightness will be learned and updated in the next coordinator refresh
+            # We just turned the light on, still don't know the last brightness
+            # known the Central Unit (yet) the brightness will be learned
+            # and updated in the next coordinator refresh
             return
 
-        # update the coordinator data manually we already know the Central Unit brightness data for this light
-        cast(SwitchBeeDimmer, self.coordinator.data[self._device.id]).brightness = state
+        # update the coordinator data manually we already know the Central Unit
+        # brightness data for this light
+        self._get_coordinator_device().brightness = state
         self.coordinator.async_set_updated_data(self.coordinator.data)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
@@ -125,5 +124,5 @@ class SwitchBeeLightEntity(SwitchBeeDeviceEntity[SwitchBeeDimmer], LightEntity):
             ) from exp
 
         # update the coordinator manually
-        cast(SwitchBeeDimmer, self.coordinator.data[self._device.id]).brightness = 0
+        self._get_coordinator_device().brightness = 0
         self.coordinator.async_set_updated_data(self.coordinator.data)

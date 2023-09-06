@@ -22,11 +22,12 @@ from homeassistant.const import (
     PRECISION_HALVES,
     PRECISION_TENTHS,
     PRECISION_WHOLE,
-    TEMP_CELSIUS,
+    UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import DeviceInfo, async_generate_entity_id
+from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DOMAIN
@@ -68,7 +69,7 @@ class OpenThermClimate(ClimateEntity):
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
     )
-    _attr_temperature_unit = TEMP_CELSIUS
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
 
     def __init__(self, gw_dev, options):
         """Initialize the device."""
@@ -201,7 +202,7 @@ class OpenThermClimate(ClimateEntity):
         """Return the precision of the system."""
         if self.temp_read_precision:
             return self.temp_read_precision
-        if self.hass.config.units.temperature_unit == TEMP_CELSIUS:
+        if self.hass.config.units.temperature_unit == UnitOfTemperature.CELSIUS:
             return PRECISION_HALVES
         return PRECISION_WHOLE
 
@@ -247,7 +248,7 @@ class OpenThermClimate(ClimateEntity):
         """Return the supported step of target temperature."""
         if self.temp_set_precision:
             return self.temp_set_precision
-        if self.hass.config.units.temperature_unit == TEMP_CELSIUS:
+        if self.hass.config.units.temperature_unit == UnitOfTemperature.CELSIUS:
             return PRECISION_HALVES
         return PRECISION_WHOLE
 

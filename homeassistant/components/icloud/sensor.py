@@ -7,8 +7,8 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.icon import icon_for_battery_level
 
@@ -47,8 +47,7 @@ def add_entities(account, async_add_entities, tracked):
         new_tracked.append(IcloudDeviceBatterySensor(account, device))
         tracked.add(dev_id)
 
-    if new_tracked:
-        async_add_entities(new_tracked, True)
+    async_add_entities(new_tracked, True)
 
 
 class IcloudDeviceBatterySensor(SensorEntity):
@@ -57,6 +56,7 @@ class IcloudDeviceBatterySensor(SensorEntity):
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_should_poll = False
+    _attr_has_entity_name = True
 
     def __init__(self, account: IcloudAccount, device: IcloudDevice) -> None:
         """Initialize the battery sensor."""
@@ -68,11 +68,6 @@ class IcloudDeviceBatterySensor(SensorEntity):
     def unique_id(self) -> str:
         """Return a unique ID."""
         return f"{self._device.unique_id}_battery"
-
-    @property
-    def name(self) -> str:
-        """Sensor name."""
-        return f"{self._device.name} battery state"
 
     @property
     def native_value(self) -> int | None:

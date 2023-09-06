@@ -1,15 +1,14 @@
 """Sensor for checking the status of London Underground tube lines."""
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 import logging
 
-import async_timeout
 from london_tube_status import TubeData
 import voluptuous as vol
 
 from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity
-from homeassistant.const import ATTR_ATTRIBUTION
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import PlatformNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -25,11 +24,8 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "london_underground"
 
-ATTRIBUTION = "Powered by TfL Open Data"
-
 CONF_LINE = "line"
 
-ICON = "mdi:subway"
 
 SCAN_INTERVAL = timedelta(seconds=30)
 
@@ -94,7 +90,7 @@ class LondonTubeCoordinator(DataUpdateCoordinator):
         self._data = data
 
     async def _async_update_data(self):
-        async with async_timeout.timeout(10):
+        async with asyncio.timeout(10):
             await self._data.update()
             return self._data.data
 
@@ -102,11 +98,13 @@ class LondonTubeCoordinator(DataUpdateCoordinator):
 class LondonTubeSensor(CoordinatorEntity[LondonTubeCoordinator], SensorEntity):
     """Sensor that reads the status of a line from Tube Data."""
 
+    _attr_attribution = "Powered by TfL Open Data"
+    _attr_icon = "mdi:subway"
+
     def __init__(self, coordinator, name):
         """Initialize the London Underground sensor."""
         super().__init__(coordinator)
         self._name = name
-        self.attrs = {ATTR_ATTRIBUTION: ATTRIBUTION}
 
     @property
     def name(self):
@@ -119,12 +117,6 @@ class LondonTubeSensor(CoordinatorEntity[LondonTubeCoordinator], SensorEntity):
         return self.coordinator.data[self.name]["State"]
 
     @property
-    def icon(self):
-        """Icon to use in the frontend, if any."""
-        return ICON
-
-    @property
     def extra_state_attributes(self):
         """Return other details about the sensor state."""
-        self.attrs["Description"] = self.coordinator.data[self.name]["Description"]
-        return self.attrs
+        return {"Description": self.coordinator.data[self.name]["Description"]}

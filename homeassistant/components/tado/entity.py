@@ -1,5 +1,6 @@
 """Base class for Tado entity."""
-from homeassistant.helpers.entity import DeviceInfo, Entity
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import Entity
 
 from .const import DEFAULT_NAME, DOMAIN, TADO_HOME, TADO_ZONE
 
@@ -8,6 +9,7 @@ class TadoDeviceEntity(Entity):
     """Base implementation for Tado device."""
 
     _attr_should_poll = False
+    _attr_has_entity_name = True
 
     def __init__(self, device_info):
         """Initialize a Tado device."""
@@ -33,6 +35,9 @@ class TadoDeviceEntity(Entity):
 class TadoHomeEntity(Entity):
     """Base implementation for Tado home."""
 
+    _attr_should_poll = False
+    _attr_has_entity_name = True
+
     def __init__(self, tado):
         """Initialize a Tado home."""
         super().__init__()
@@ -54,6 +59,7 @@ class TadoHomeEntity(Entity):
 class TadoZoneEntity(Entity):
     """Base implementation for Tado zone."""
 
+    _attr_has_entity_name = True
     _attr_should_poll = False
 
     def __init__(self, zone_name, home_id, zone_id):
@@ -67,7 +73,9 @@ class TadoZoneEntity(Entity):
     def device_info(self) -> DeviceInfo:
         """Return the device_info of the device."""
         return DeviceInfo(
-            configuration_url=f"https://app.tado.com/en/main/home/zoneV2/{self.zone_id}",
+            configuration_url=(
+                f"https://app.tado.com/en/main/home/zoneV2/{self.zone_id}"
+            ),
             identifiers={(DOMAIN, self._device_zone_id)},
             name=self.zone_name,
             manufacturer=DEFAULT_NAME,
