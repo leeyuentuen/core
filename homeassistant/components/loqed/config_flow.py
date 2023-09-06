@@ -44,9 +44,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             cloud_client = cloud_loqed.LoqedCloudAPI(cloud_api_client)
             lock_data = await cloud_client.async_get_locks()
-        except aiohttp.ClientError:
+        except aiohttp.ClientError as err:
             _LOGGER.error("HTTP Connection error to loqed API")
-            raise CannotConnect from aiohttp.ClientError
+            raise CannotConnect from err
 
         try:
             selected_lock = next(
@@ -123,7 +123,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 step_id="user",
                 data_schema=user_data_schema,
                 description_placeholders={
-                    "config_url": "https://integrations.production.loqed.com/personal-access-tokens",
+                    "config_url": "https://integrations.loqed.com/personal-access-tokens",
                 },
             )
 
@@ -137,7 +137,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors["base"] = "invalid_auth"
         else:
             await self.async_set_unique_id(
-                re.sub(r"LOQED-([a-f0-9]+)\.local", r"\1", info["bridge_mdns_hostname"])
+                re.sub(
+                    r"LOQED-([a-f0-9]+)\.local", r"\1", info["bridge_mdns_hostname"]
+                ),
+                raise_on_progress=False,
             )
             self._abort_if_unique_id_configured()
 
@@ -153,7 +156,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=user_data_schema,
             errors=errors,
             description_placeholders={
-                "config_url": "https://integrations.production.loqed.com/personal-access-tokens",
+                "config_url": "https://integrations.loqed.com/personal-access-tokens",
             },
         )
 

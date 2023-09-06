@@ -251,6 +251,21 @@ ZEROCONF = {
     "_airplay._tcp.local.": [
         {
             "domain": "apple_tv",
+            "properties": {
+                "model": "appletv*",
+            },
+        },
+        {
+            "domain": "apple_tv",
+            "properties": {
+                "model": "audioaccessory*",
+            },
+        },
+        {
+            "domain": "apple_tv",
+            "properties": {
+                "am": "airport*",
+            },
         },
         {
             "domain": "samsungtv",
@@ -666,6 +681,12 @@ ZEROCONF = {
     "_touch-able._tcp.local.": [
         {
             "domain": "apple_tv",
+        },
+    ],
+    "_uzg-01._tcp.local.": [
+        {
+            "domain": "zha",
+            "name": "uzg-01*",
         },
     ],
     "_viziocast._tcp.local.": [

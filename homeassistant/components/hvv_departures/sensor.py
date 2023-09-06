@@ -11,8 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ID
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import aiohttp_client
-from homeassistant.helpers.device_registry import DeviceEntryType
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import Throttle
 from homeassistant.util.dt import get_time_zone, utcnow
@@ -60,7 +59,6 @@ class HVVDepartureSensor(SensorEntity):
     _attr_icon = ICON
     _attr_translation_key = "departures"
     _attr_has_entity_name = True
-    _attr_extra_state_attributes = {}
     _attr_available = False
 
     def __init__(self, hass, config_entry, session, hub):
@@ -68,6 +66,7 @@ class HVVDepartureSensor(SensorEntity):
         self.config_entry = config_entry
         self.station_name = self.config_entry.data[CONF_STATION]["name"]
         self._last_error = None
+        self._attr_extra_state_attributes = {}
 
         self.gti = hub.gti
 
