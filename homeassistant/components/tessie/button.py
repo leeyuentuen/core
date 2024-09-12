@@ -1,4 +1,5 @@
 """Button platform for Tessie integration."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -9,20 +10,19 @@ from tessie_api import (
     enable_keyless_driving,
     flash_lights,
     honk,
-    open_close_rear_trunk,
-    open_front_trunk,
     trigger_homelink,
     wake,
 )
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
-from .coordinator import TessieStateUpdateCoordinator
+from . import TessieConfigEntry
 from .entity import TessieEntity
+from .models import TessieVehicleData
+
+PARALLEL_UPDATES = 0
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -33,40 +33,31 @@ class TessieButtonEntityDescription(ButtonEntityDescription):
 
 
 DESCRIPTIONS: tuple[TessieButtonEntityDescription, ...] = (
-    TessieButtonEntityDescription(key="wake", func=lambda: wake, icon="mdi:sleep-off"),
+    TessieButtonEntityDescription(key="wake", func=lambda: wake),
+    TessieButtonEntityDescription(key="flash_lights", func=lambda: flash_lights),
+    TessieButtonEntityDescription(key="honk", func=lambda: honk),
     TessieButtonEntityDescription(
-        key="flash_lights", func=lambda: flash_lights, icon="mdi:flashlight"
-    ),
-    TessieButtonEntityDescription(key="honk", func=honk, icon="mdi:bullhorn"),
-    TessieButtonEntityDescription(
-        key="trigger_homelink", func=lambda: trigger_homelink, icon="mdi:garage"
+        key="trigger_homelink", func=lambda: trigger_homelink
     ),
     TessieButtonEntityDescription(
         key="enable_keyless_driving",
         func=lambda: enable_keyless_driving,
-        icon="mdi:car-key",
     ),
-    TessieButtonEntityDescription(
-        key="boombox", func=lambda: boombox, icon="mdi:volume-high"
-    ),
-    TessieButtonEntityDescription(
-        key="frunk", func=lambda: open_front_trunk, icon="mdi:car"
-    ),
-    TessieButtonEntityDescription(
-        key="trunk", func=lambda: open_close_rear_trunk, icon="mdi:car-back"
-    ),
+    TessieButtonEntityDescription(key="boombox", func=lambda: boombox),
 )
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant,
+    entry: TessieConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Tessie Button platform from a config entry."""
-    data = hass.data[DOMAIN][entry.entry_id]
+    data = entry.runtime_data
 
     async_add_entities(
-        TessieButtonEntity(vehicle.state_coordinator, description)
-        for vehicle in data
+        TessieButtonEntity(vehicle, description)
+        for vehicle in data.vehicles
         for description in DESCRIPTIONS
     )
 
@@ -78,11 +69,11 @@ class TessieButtonEntity(TessieEntity, ButtonEntity):
 
     def __init__(
         self,
-        coordinator: TessieStateUpdateCoordinator,
+        vehicle: TessieVehicleData,
         description: TessieButtonEntityDescription,
     ) -> None:
         """Initialize the Button."""
-        super().__init__(coordinator, description.key)
+        super().__init__(vehicle, description.key)
         self.entity_description = description
 
     async def async_press(self) -> None:

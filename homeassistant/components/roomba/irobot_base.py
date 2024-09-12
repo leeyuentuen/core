@@ -1,4 +1,5 @@
 """Base class for iRobot devices."""
+
 from __future__ import annotations
 
 import asyncio
@@ -105,17 +106,26 @@ class IRobotEntity(Entity):
     @property
     def run_stats(self):
         """Return the run stats."""
-        return self.vacuum_state.get("bbrun")
+        return self.vacuum_state.get("bbrun", {})
 
     @property
     def mission_stats(self):
         """Return the mission stats."""
-        return self.vacuum_state.get("bbmssn")
+        return self.vacuum_state.get("bbmssn", {})
 
     @property
     def battery_stats(self):
         """Return the battery stats."""
         return self.vacuum_state.get("bbchg3", {})
+
+    @property
+    def last_mission(self):
+        """Return last mission start time."""
+        if (
+            ts := self.vacuum_state.get("cleanMissionStatus", {}).get("mssnStrtTm")
+        ) is None or ts == 0:
+            return None
+        return dt_util.utc_from_timestamp(ts)
 
     @property
     def _robot_state(self):
@@ -250,7 +260,7 @@ class IRobotVacuum(IRobotEntity, StateVacuumEntity):
         """Set the vacuum cleaner to return to the dock."""
         if self.state == STATE_CLEANING:
             await self.async_pause()
-            for _ in range(0, 10):
+            for _ in range(10):
                 if self.state == STATE_PAUSED:
                     break
                 await asyncio.sleep(1)

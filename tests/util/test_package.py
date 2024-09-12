@@ -1,15 +1,17 @@
 """Test Home Assistant package util methods."""
+
 import asyncio
-from importlib.metadata import PackageNotFoundError, metadata
+from collections.abc import Generator
+from importlib.metadata import metadata
 import logging
 import os
 from subprocess import PIPE
 import sys
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
 import pytest
 
-import homeassistant.util.package as package
+from homeassistant.util import package
 
 RESOURCE_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "resources")
@@ -23,7 +25,7 @@ TEST_ZIP_REQ = "file://{}#{}".format(
 
 
 @pytest.fixture
-def mock_sys():
+def mock_sys() -> Generator[MagicMock]:
     """Mock sys."""
     with patch("homeassistant.util.package.sys", spec=object) as sys_mock:
         sys_mock.executable = "python3"
@@ -31,19 +33,19 @@ def mock_sys():
 
 
 @pytest.fixture
-def deps_dir():
+def deps_dir() -> str:
     """Return path to deps directory."""
     return os.path.abspath("/deps_dir")
 
 
 @pytest.fixture
-def lib_dir(deps_dir):
+def lib_dir(deps_dir) -> str:
     """Return path to lib directory."""
     return os.path.join(deps_dir, "lib_dir")
 
 
 @pytest.fixture
-def mock_popen(lib_dir):
+def mock_popen(lib_dir) -> Generator[MagicMock]:
     """Return a Popen mock."""
     with patch("homeassistant.util.package.Popen") as popen_mock:
         popen_mock.return_value.__enter__ = popen_mock
@@ -56,7 +58,7 @@ def mock_popen(lib_dir):
 
 
 @pytest.fixture
-def mock_env_copy():
+def mock_env_copy() -> Generator[Mock]:
     """Mock os.environ.copy."""
     with patch("homeassistant.util.package.os.environ.copy") as env_copy:
         env_copy.return_value = {}
@@ -64,14 +66,14 @@ def mock_env_copy():
 
 
 @pytest.fixture
-def mock_venv():
+def mock_venv() -> Generator[MagicMock]:
     """Mock homeassistant.util.package.is_virtual_env."""
     with patch("homeassistant.util.package.is_virtual_env") as mock:
         mock.return_value = True
         yield mock
 
 
-def mock_async_subprocess():
+def mock_async_subprocess() -> Generator[MagicMock]:
     """Return an async Popen mock."""
     async_popen = MagicMock()
 
@@ -84,13 +86,14 @@ def mock_async_subprocess():
     return async_popen
 
 
-def test_install(mock_sys, mock_popen, mock_env_copy, mock_venv) -> None:
+@pytest.mark.usefixtures("mock_sys", "mock_venv")
+def test_install(mock_popen: MagicMock, mock_env_copy: MagicMock) -> None:
     """Test an install attempt on a package that doesn't exist."""
     env = mock_env_copy()
     assert package.install_package(TEST_NEW_REQ, False)
     assert mock_popen.call_count == 2
     assert mock_popen.mock_calls[0] == call(
-        [mock_sys.executable, "-m", "pip", "install", "--quiet", TEST_NEW_REQ],
+        ["uv", "pip", "install", "--quiet", TEST_NEW_REQ],
         stdin=PIPE,
         stdout=PIPE,
         stderr=PIPE,
@@ -100,15 +103,33 @@ def test_install(mock_sys, mock_popen, mock_env_copy, mock_venv) -> None:
     assert mock_popen.return_value.communicate.call_count == 1
 
 
-def test_install_upgrade(mock_sys, mock_popen, mock_env_copy, mock_venv) -> None:
+@pytest.mark.usefixtures("mock_sys", "mock_venv")
+def test_install_with_timeout(mock_popen: MagicMock, mock_env_copy: MagicMock) -> None:
+    """Test an install attempt on a package that doesn't exist with a timeout set."""
+    env = mock_env_copy()
+    assert package.install_package(TEST_NEW_REQ, False, timeout=10)
+    assert mock_popen.call_count == 2
+    env["HTTP_TIMEOUT"] = "10"
+    assert mock_popen.mock_calls[0] == call(
+        ["uv", "pip", "install", "--quiet", TEST_NEW_REQ],
+        stdin=PIPE,
+        stdout=PIPE,
+        stderr=PIPE,
+        env=env,
+        close_fds=False,
+    )
+    assert mock_popen.return_value.communicate.call_count == 1
+
+
+@pytest.mark.usefixtures("mock_sys", "mock_venv")
+def test_install_upgrade(mock_popen, mock_env_copy) -> None:
     """Test an upgrade attempt on a package."""
     env = mock_env_copy()
     assert package.install_package(TEST_NEW_REQ)
     assert mock_popen.call_count == 2
     assert mock_popen.mock_calls[0] == call(
         [
-            mock_sys.executable,
-            "-m",
+            "uv",
             "pip",
             "install",
             "--quiet",
@@ -132,8 +153,7 @@ def test_install_target(mock_sys, mock_popen, mock_env_copy, mock_venv) -> None:
     mock_venv.return_value = False
     mock_sys.platform = "linux"
     args = [
-        mock_sys.executable,
-        "-m",
+        "uv",
         "pip",
         "install",
         "--quiet",
@@ -149,16 +169,16 @@ def test_install_target(mock_sys, mock_popen, mock_env_copy, mock_venv) -> None:
     assert mock_popen.return_value.communicate.call_count == 1
 
 
-def test_install_target_venv(mock_sys, mock_popen, mock_env_copy, mock_venv) -> None:
+@pytest.mark.usefixtures("mock_sys", "mock_popen", "mock_env_copy", "mock_venv")
+def test_install_target_venv() -> None:
     """Test an install with a target in a virtual environment."""
     target = "target_folder"
     with pytest.raises(AssertionError):
         package.install_package(TEST_NEW_REQ, False, target=target)
 
 
-def test_install_error(
-    caplog: pytest.LogCaptureFixture, mock_sys, mock_popen, mock_venv
-) -> None:
+@pytest.mark.usefixtures("mock_sys", "mock_venv")
+def test_install_error(caplog: pytest.LogCaptureFixture, mock_popen) -> None:
     """Test an install that errors out."""
     caplog.set_level(logging.WARNING)
     mock_popen.return_value.returncode = 1
@@ -168,7 +188,8 @@ def test_install_error(
         assert record.levelname == "ERROR"
 
 
-def test_install_constraint(mock_sys, mock_popen, mock_env_copy, mock_venv) -> None:
+@pytest.mark.usefixtures("mock_sys", "mock_venv")
+def test_install_constraint(mock_popen, mock_env_copy) -> None:
     """Test install with constraint file on not installed package."""
     env = mock_env_copy()
     constraints = "constraints_file.txt"
@@ -176,8 +197,7 @@ def test_install_constraint(mock_sys, mock_popen, mock_env_copy, mock_venv) -> N
     assert mock_popen.call_count == 2
     assert mock_popen.mock_calls[0] == call(
         [
-            mock_sys.executable,
-            "-m",
+            "uv",
             "pip",
             "install",
             "--quiet",
@@ -217,7 +237,7 @@ async def test_async_get_user_site(mock_env_copy) -> None:
     assert ret == os.path.join(deps_dir, "lib_dir")
 
 
-def test_check_package_global() -> None:
+def test_check_package_global(caplog: pytest.LogCaptureFixture) -> None:
     """Test for an installed package."""
     pkg = metadata("homeassistant")
     installed_package = pkg["name"]
@@ -229,27 +249,32 @@ def test_check_package_global() -> None:
     assert package.is_installed(f"{installed_package}<={installed_version}")
     assert not package.is_installed(f"{installed_package}<{installed_version}")
 
+    assert package.is_installed("-1 invalid_package") is False
+    assert "Invalid requirement '-1 invalid_package'" in caplog.text
 
-def test_check_package_zip() -> None:
-    """Test for an installed zip package."""
+
+def test_check_package_fragment(caplog: pytest.LogCaptureFixture) -> None:
+    """Test for an installed package with a fragment."""
     assert not package.is_installed(TEST_ZIP_REQ)
+    assert package.is_installed("git+https://github.com/pypa/pip#pip>=1")
+    assert not package.is_installed("git+https://github.com/pypa/pip#-1 invalid")
+    assert (
+        "Invalid requirement 'git+https://github.com/pypa/pip#-1 invalid'"
+        in caplog.text
+    )
 
 
-def test_get_distribution_falls_back_to_version() -> None:
-    """Test for get_distribution failing and fallback to version."""
+def test_get_is_installed() -> None:
+    """Test is_installed can parse complex requirements."""
     pkg = metadata("homeassistant")
     installed_package = pkg["name"]
     installed_version = pkg["version"]
 
-    with patch(
-        "homeassistant.util.package.distribution",
-        side_effect=PackageNotFoundError,
-    ):
-        assert package.is_installed(installed_package)
-        assert package.is_installed(f"{installed_package}=={installed_version}")
-        assert package.is_installed(f"{installed_package}>={installed_version}")
-        assert package.is_installed(f"{installed_package}<={installed_version}")
-        assert not package.is_installed(f"{installed_package}<{installed_version}")
+    assert package.is_installed(installed_package)
+    assert package.is_installed(f"{installed_package}=={installed_version}")
+    assert package.is_installed(f"{installed_package}>={installed_version}")
+    assert package.is_installed(f"{installed_package}<={installed_version}")
+    assert not package.is_installed(f"{installed_package}<{installed_version}")
 
 
 def test_check_package_previous_failed_install() -> None:
@@ -258,9 +283,6 @@ def test_check_package_previous_failed_install() -> None:
     installed_package = pkg["name"]
     installed_version = pkg["version"]
 
-    with patch(
-        "homeassistant.util.package.distribution",
-        side_effect=PackageNotFoundError,
-    ), patch("homeassistant.util.package.version", return_value=None):
+    with patch("homeassistant.util.package.version", return_value=None):
         assert not package.is_installed(installed_package)
         assert not package.is_installed(f"{installed_package}=={installed_version}")
