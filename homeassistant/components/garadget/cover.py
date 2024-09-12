@@ -1,4 +1,5 @@
 """Platform for the Garadget cover component."""
+
 from __future__ import annotations
 
 import logging
@@ -8,7 +9,7 @@ import requests
 import voluptuous as vol
 
 from homeassistant.components.cover import (
-    PLATFORM_SCHEMA,
+    PLATFORM_SCHEMA as COVER_PLATFORM_SCHEMA,
     CoverDeviceClass,
     CoverEntity,
 )
@@ -60,7 +61,7 @@ COVER_SCHEMA = vol.Schema(
     }
 )
 
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
+PLATFORM_SCHEMA = COVER_PLATFORM_SCHEMA.extend(
     {vol.Required(CONF_COVERS): cv.schema_with_slug_keys(COVER_SCHEMA)}
 )
 
@@ -91,6 +92,8 @@ def setup_platform(
 
 class GaradgetCover(CoverEntity):
     """Representation of a Garadget cover."""
+
+    _attr_device_class = CoverDeviceClass.GARAGE
 
     def __init__(self, hass, args):
         """Initialize the cover."""
@@ -174,11 +177,6 @@ class GaradgetCover(CoverEntity):
             return None
         return self._state == STATE_CLOSED
 
-    @property
-    def device_class(self) -> CoverDeviceClass:
-        """Return the class of this device, from component DEVICE_CLASSES."""
-        return CoverDeviceClass.GARAGE
-
     def get_token(self):
         """Get new token for usage during this session."""
         args = {
@@ -215,23 +213,20 @@ class GaradgetCover(CoverEntity):
     def close_cover(self, **kwargs: Any) -> None:
         """Close the cover."""
         if self._state not in ["close", "closing"]:
-            ret = self._put_command("setState", "close")
+            self._put_command("setState", "close")
             self._start_watcher("close")
-            return ret.get("return_value") == 1
 
     def open_cover(self, **kwargs: Any) -> None:
         """Open the cover."""
         if self._state not in ["open", "opening"]:
-            ret = self._put_command("setState", "open")
+            self._put_command("setState", "open")
             self._start_watcher("open")
-            return ret.get("return_value") == 1
 
     def stop_cover(self, **kwargs: Any) -> None:
         """Stop the door where it is."""
         if self._state not in ["stopped"]:
-            ret = self._put_command("setState", "stop")
+            self._put_command("setState", "stop")
             self._start_watcher("stop")
-            return ret["return_value"] == 1
 
     def update(self) -> None:
         """Get updated status from API."""

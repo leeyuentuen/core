@@ -1,4 +1,5 @@
 """TemplateEntity utility class."""
+
 from __future__ import annotations
 
 import contextlib
@@ -29,7 +30,7 @@ from homeassistant.util.json import JSON_DECODE_EXCEPTIONS, json_loads
 
 from . import config_validation as cv
 from .entity import Entity
-from .template import attach as template_attach, render_complex
+from .template import render_complex
 from .typing import ConfigType
 
 CONF_AVAILABILITY = "availability"
@@ -119,6 +120,7 @@ class TriggerBaseEntity(Entity):
         # We make a copy so our initial render is 'unknown' and not 'unavailable'
         self._rendered = dict(self._static_rendered)
         self._parse_result = {CONF_AVAILABILITY}
+        self._attr_device_class = config.get(CONF_DEVICE_CLASS)
 
     @property
     def name(self) -> str | None:
@@ -129,11 +131,6 @@ class TriggerBaseEntity(Entity):
     def unique_id(self) -> str | None:
         """Return unique ID of the entity."""
         return self._unique_id
-
-    @property
-    def device_class(self):  # type: ignore[no-untyped-def]
-        """Return device class of the entity."""
-        return self._config.get(CONF_DEVICE_CLASS)
 
     @property
     def icon(self) -> str | None:
@@ -159,11 +156,6 @@ class TriggerBaseEntity(Entity):
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return extra attributes."""
         return self._rendered.get(CONF_ATTRIBUTES)
-
-    async def async_added_to_hass(self) -> None:
-        """Handle being added to Home Assistant."""
-        await super().async_added_to_hass()
-        template_attach(self.hass, self._config)
 
     def _set_unique_id(self, unique_id: str | None) -> None:
         """Set unique id."""

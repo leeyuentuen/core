@@ -1,7 +1,9 @@
 """Validate manifests."""
+
 from __future__ import annotations
 
 import argparse
+from operator import attrgetter
 import pathlib
 import sys
 from time import monotonic
@@ -12,9 +14,10 @@ from . import (
     codeowners,
     config_flow,
     config_schema,
-    coverage,
     dependencies,
     dhcp,
+    docker,
+    icons,
     json,
     manifest,
     metadata,
@@ -36,6 +39,7 @@ INTEGRATION_PLUGINS = [
     config_schema,
     dependencies,
     dhcp,
+    icons,
     json,
     manifest,
     mqtt,
@@ -48,7 +52,7 @@ INTEGRATION_PLUGINS = [
     config_flow,  # This needs to run last, after translations are processed
 ]
 HASS_PLUGINS = [
-    coverage,
+    docker,
     mypy_config,
     metadata,
 ]
@@ -103,6 +107,12 @@ def get_config() -> Config:
         default=ALL_PLUGIN_NAMES,
         help="Comma-separate list of plugins to run. Valid plugin names: %(default)s",
     )
+    parser.add_argument(
+        "--core-integrations-path",
+        type=pathlib.Path,
+        default=pathlib.Path("homeassistant/components"),
+        help="Path to core integrations",
+    )
     parsed = parser.parse_args()
 
     if parsed.action is None:
@@ -125,6 +135,7 @@ def get_config() -> Config:
         action=parsed.action,
         requirements=parsed.requirements,
         plugins=set(parsed.plugins),
+        core_integrations_path=parsed.core_integrations_path,
     )
 
 
@@ -142,12 +153,12 @@ def main() -> int:
         integrations = {}
 
         for int_path in config.specific_integrations:
-            integration = Integration(int_path)
+            integration = Integration(int_path, config)
             integration.load_manifest()
             integrations[integration.domain] = integration
 
     else:
-        integrations = Integration.load_dir(pathlib.Path("homeassistant/components"))
+        integrations = Integration.load_dir(config.core_integrations_path, config)
         plugins += HASS_PLUGINS
 
     for plugin in plugins:
@@ -229,7 +240,7 @@ def print_integrations_status(
     show_fixable_errors: bool = True,
 ) -> None:
     """Print integration status."""
-    for integration in sorted(integrations, key=lambda itg: itg.domain):
+    for integration in sorted(integrations, key=attrgetter("domain")):
         extra = f" - {integration.path}" if config.specific_integrations else ""
         print(f"Integration {integration.domain}{extra}:")
         for error in integration.errors:

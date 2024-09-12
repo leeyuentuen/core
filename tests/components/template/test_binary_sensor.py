@@ -1,10 +1,13 @@
 """The tests for the Template Binary sensor platform."""
+
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 import logging
 from unittest.mock import patch
 
 from freezegun.api import FrozenDateTimeFactory
 import pytest
+from syrupy.assertion import SnapshotAssertion
 
 from homeassistant import setup
 from homeassistant.components import binary_sensor, template
@@ -17,12 +20,13 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 from homeassistant.core import Context, CoreState, HomeAssistant, State
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.entity_component import async_update_entity
 from homeassistant.setup import async_setup_component
 import homeassistant.util.dt as dt_util
 
 from tests.common import (
+    MockConfigEntry,
     assert_setup_component,
     async_fire_time_changed,
     mock_restore_cache,
@@ -121,6 +125,55 @@ async def test_setup(hass: HomeAssistant, start_ha, entity_id) -> None:
     assert state.name == "virtual thingy"
     assert state.state == ON
     assert state.attributes["device_class"] == "motion"
+
+
+@pytest.mark.parametrize(
+    "config_entry_extra_options",
+    [
+        {},
+        {"device_class": "battery"},
+    ],
+)
+async def test_setup_config_entry(
+    hass: HomeAssistant,
+    snapshot: SnapshotAssertion,
+    config_entry_extra_options: dict[str, str],
+) -> None:
+    """Test the config flow."""
+    state_template = (
+        "{{ states('binary_sensor.one') == 'on' or "
+        "   states('binary_sensor.two') == 'on' }}"
+    )
+    input_entities = ["one", "two"]
+    input_states = {"one": "on", "two": "off"}
+    template_type = binary_sensor.DOMAIN
+
+    for input_entity in input_entities:
+        hass.states.async_set(
+            f"{template_type}.{input_entity}",
+            input_states[input_entity],
+            {},
+        )
+
+    template_config_entry = MockConfigEntry(
+        data={},
+        domain=template.DOMAIN,
+        options={
+            "name": "My template",
+            "state": state_template,
+            "template_type": template_type,
+        }
+        | config_entry_extra_options,
+        title="My template",
+    )
+    template_config_entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(template_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get(f"{template_type}.my_template")
+    assert state is not None
+    assert state == snapshot
 
 
 @pytest.mark.parametrize("count", [0])
@@ -713,7 +766,7 @@ async def test_no_update_template_match_all(
 ) -> None:
     """Test that we do not update sensors that match on all."""
 
-    hass.state = CoreState.not_running
+    hass.set_state(CoreState.not_running)
 
     await setup.async_setup_component(
         hass,
@@ -943,20 +996,32 @@ async def test_availability_icon_picture(
     ],
 )
 @pytest.mark.parametrize(
-    ("extra_config", "restored_state", "initial_state"),
+    ("extra_config", "source_state", "restored_state", "initial_state"),
     [
-        ({}, ON, OFF),
-        ({}, OFF, OFF),
-        ({}, STATE_UNAVAILABLE, OFF),
-        ({}, STATE_UNKNOWN, OFF),
-        ({"delay_off": 5}, ON, ON),
-        ({"delay_off": 5}, OFF, OFF),
-        ({"delay_off": 5}, STATE_UNAVAILABLE, STATE_UNKNOWN),
-        ({"delay_off": 5}, STATE_UNKNOWN, STATE_UNKNOWN),
-        ({"delay_on": 5}, ON, ON),
-        ({"delay_on": 5}, OFF, OFF),
-        ({"delay_on": 5}, STATE_UNAVAILABLE, STATE_UNKNOWN),
-        ({"delay_on": 5}, STATE_UNKNOWN, STATE_UNKNOWN),
+        ({}, OFF, ON, OFF),
+        ({}, OFF, OFF, OFF),
+        ({}, OFF, STATE_UNAVAILABLE, OFF),
+        ({}, OFF, STATE_UNKNOWN, OFF),
+        ({"delay_off": 5}, OFF, ON, ON),
+        ({"delay_off": 5}, OFF, OFF, OFF),
+        ({"delay_off": 5}, OFF, STATE_UNAVAILABLE, STATE_UNKNOWN),
+        ({"delay_off": 5}, OFF, STATE_UNKNOWN, STATE_UNKNOWN),
+        ({"delay_on": 5}, OFF, ON, OFF),
+        ({"delay_on": 5}, OFF, OFF, OFF),
+        ({"delay_on": 5}, OFF, STATE_UNAVAILABLE, OFF),
+        ({"delay_on": 5}, OFF, STATE_UNKNOWN, OFF),
+        ({}, ON, ON, ON),
+        ({}, ON, OFF, ON),
+        ({}, ON, STATE_UNAVAILABLE, ON),
+        ({}, ON, STATE_UNKNOWN, ON),
+        ({"delay_off": 5}, ON, ON, ON),
+        ({"delay_off": 5}, ON, OFF, ON),
+        ({"delay_off": 5}, ON, STATE_UNAVAILABLE, ON),
+        ({"delay_off": 5}, ON, STATE_UNKNOWN, ON),
+        ({"delay_on": 5}, ON, ON, ON),
+        ({"delay_on": 5}, ON, OFF, OFF),
+        ({"delay_on": 5}, ON, STATE_UNAVAILABLE, STATE_UNKNOWN),
+        ({"delay_on": 5}, ON, STATE_UNKNOWN, STATE_UNKNOWN),
     ],
 )
 async def test_restore_state(
@@ -965,18 +1030,20 @@ async def test_restore_state(
     domain,
     config,
     extra_config,
+    source_state,
     restored_state,
     initial_state,
 ) -> None:
     """Test restoring template binary sensor."""
 
+    hass.states.async_set("sensor.test_state", source_state)
     fake_state = State(
         "binary_sensor.test",
         restored_state,
         {},
     )
     mock_restore_cache(hass, (fake_state,))
-    config = dict(config)
+    config = deepcopy(config)
     config["template"]["binary_sensor"].update(**extra_config)
     with assert_setup_component(count, domain):
         assert await async_setup_component(
@@ -1221,9 +1288,9 @@ async def test_trigger_entity_restore_state(
 
     state = hass.states.get("binary_sensor.test")
     assert state.state == initial_state
-    for attr in restored_attributes:
+    for attr, value in restored_attributes.items():
         if attr in initial_attributes:
-            assert state.attributes[attr] == restored_attributes[attr]
+            assert state.attributes[attr] == value
         else:
             assert attr not in state.attributes
     assert "another" not in state.attributes
@@ -1351,3 +1418,42 @@ async def test_trigger_entity_restore_state_auto_off_expired(
 
     state = hass.states.get("binary_sensor.test")
     assert state.state == OFF
+
+
+async def test_device_id(
+    hass: HomeAssistant,
+    device_registry: dr.DeviceRegistry,
+    entity_registry: er.EntityRegistry,
+) -> None:
+    """Test for device for Template."""
+
+    device_config_entry = MockConfigEntry()
+    device_config_entry.add_to_hass(hass)
+    device_entry = device_registry.async_get_or_create(
+        config_entry_id=device_config_entry.entry_id,
+        identifiers={("sensor", "identifier_test")},
+        connections={("mac", "30:31:32:33:34:35")},
+    )
+    await hass.async_block_till_done()
+    assert device_entry is not None
+    assert device_entry.id is not None
+
+    template_config_entry = MockConfigEntry(
+        data={},
+        domain=template.DOMAIN,
+        options={
+            "name": "My template",
+            "state": "{{10 > 8}}",
+            "template_type": "binary_sensor",
+            "device_id": device_entry.id,
+        },
+        title="My template",
+    )
+    template_config_entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(template_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    template_entity = entity_registry.async_get("binary_sensor.my_template")
+    assert template_entity is not None
+    assert template_entity.device_id == device_entry.id

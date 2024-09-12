@@ -1,12 +1,19 @@
 """Config flow for Plaato."""
+
 from __future__ import annotations
+
+from typing import Any
 
 from pyplaato.plaato import PlaatoDeviceType
 import voluptuous as vol
 
-from homeassistant import config_entries
 from homeassistant.components import cloud, webhook
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.const import CONF_SCAN_INTERVAL, CONF_TOKEN, CONF_WEBHOOK_ID
 from homeassistant.core import callback
 import homeassistant.helpers.config_validation as cv
@@ -26,16 +33,18 @@ from .const import (
 )
 
 
-class PlaatoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class PlaatoConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handles a Plaato config flow."""
 
     VERSION = 1
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize."""
-        self._init_info = {}
+        self._init_info: dict[str, Any] = {}
 
-    async def async_step_user(self, user_input=None):
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Handle user step."""
 
         if user_input is not None:
@@ -168,7 +177,7 @@ class PlaatoConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return PlaatoOptionsFlowHandler(config_entry)
 
 
-class PlaatoOptionsFlowHandler(config_entries.OptionsFlow):
+class PlaatoOptionsFlowHandler(OptionsFlow):
     """Handle Plaato options."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:
@@ -185,7 +194,9 @@ class PlaatoOptionsFlowHandler(config_entries.OptionsFlow):
 
         return await self.async_step_user()
 
-    async def async_step_user(self, user_input=None):
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
