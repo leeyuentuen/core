@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from kasa import (
+    BaseProtocol,
     Device,
     DeviceConfig,
     DeviceConnectionParameters,
@@ -17,9 +18,10 @@ from kasa import (
     Module,
 )
 from kasa.interfaces import Fan, Light, LightEffect, LightState
-from kasa.protocol import BaseProtocol
+from kasa.smart.modules.alarm import Alarm
 from syrupy import SnapshotAssertion
 
+from homeassistant.components.automation import DOMAIN as AUTOMATION_DOMAIN
 from homeassistant.components.tplink import (
     CONF_AES_KEYS,
     CONF_ALIAS,
@@ -60,7 +62,9 @@ CONN_PARAMS_LEGACY = DeviceConnectionParameters(
     DeviceFamily.IotSmartPlugSwitch, DeviceEncryptionType.Xor
 )
 DEVICE_CONFIG_LEGACY = DeviceConfig(IP_ADDRESS)
-DEVICE_CONFIG_DICT_LEGACY = DEVICE_CONFIG_LEGACY.to_dict(exclude_credentials=True)
+DEVICE_CONFIG_DICT_LEGACY = {
+    k: v for k, v in DEVICE_CONFIG_LEGACY.to_dict().items() if k != "credentials"
+}
 CREDENTIALS = Credentials("foo", "bar")
 CREDENTIALS_HASH_AES = "AES/abcdefghijklmnopqrstuvabcdefghijklmnopqrstuv=="
 CREDENTIALS_HASH_KLAP = "KLAP/abcdefghijklmnopqrstuv=="
@@ -84,8 +88,12 @@ DEVICE_CONFIG_AES = DeviceConfig(
     uses_http=True,
     aes_keys=AES_KEYS,
 )
-DEVICE_CONFIG_DICT_KLAP = DEVICE_CONFIG_KLAP.to_dict(exclude_credentials=True)
-DEVICE_CONFIG_DICT_AES = DEVICE_CONFIG_AES.to_dict(exclude_credentials=True)
+DEVICE_CONFIG_DICT_KLAP = {
+    k: v for k, v in DEVICE_CONFIG_KLAP.to_dict().items() if k != "credentials"
+}
+DEVICE_CONFIG_DICT_AES = {
+    k: v for k, v in DEVICE_CONFIG_AES.to_dict().items() if k != "credentials"
+}
 CREATE_ENTRY_DATA_LEGACY = {
     CONF_HOST: IP_ADDRESS,
     CONF_ALIAS: ALIAS,
@@ -166,12 +174,18 @@ async def snapshot_platform(
     ), "Please limit the loaded platforms to 1 platform."
 
     translations = await async_get_translations(hass, "en", "entity", [DOMAIN])
+    unique_device_classes = []
     for entity_entry in entity_entries:
         if entity_entry.translation_key:
             key = f"component.{DOMAIN}.entity.{entity_entry.domain}.{entity_entry.translation_key}.name"
+            single_device_class_translation = False
+            if key not in translations and entity_entry.original_device_class:
+                if entity_entry.original_device_class not in unique_device_classes:
+                    single_device_class_translation = True
+                    unique_device_classes.append(entity_entry.original_device_class)
             assert (
-                key in translations
-            ), f"No translation for entity {entity_entry.unique_id}, expected {key}"
+                (key in translations) or single_device_class_translation
+            ), f"No translation or non unique device_class for entity {entity_entry.unique_id}, expected {key}"
         assert entity_entry == snapshot(
             name=f"{entity_entry.entity_id}-entry"
         ), f"entity entry snapshot failed for {entity_entry.entity_id}"
@@ -181,6 +195,21 @@ async def snapshot_platform(
             assert state == snapshot(
                 name=f"{entity_entry.entity_id}-state"
             ), f"state snapshot failed for {entity_entry.entity_id}"
+
+
+async def setup_automation(hass: HomeAssistant, alias: str, entity_id: str) -> None:
+    """Set up an automation for tests."""
+    assert await async_setup_component(
+        hass,
+        AUTOMATION_DOMAIN,
+        {
+            AUTOMATION_DOMAIN: {
+                "alias": alias,
+                "trigger": {"platform": "state", "entity_id": entity_id, "to": "on"},
+                "action": {"action": "notify.notify", "metadata": {}, "data": {}},
+            }
+        },
+    )
 
 
 def _mock_protocol() -> BaseProtocol:
@@ -228,20 +257,27 @@ def _mocked_device(
             for module_name in modules
         }
 
+    device_features = {}
     if features:
-        device.features = {
+        device_features = {
             feature_id: _mocked_feature(feature_id, require_fixture=True)
             for feature_id in features
             if isinstance(feature_id, str)
         }
 
-        device.features.update(
+        device_features.update(
             {
                 feature.id: feature
                 for feature in features
                 if isinstance(feature, Feature)
             }
         )
+    device.features = device_features
+
+    for mod in device.modules.values():
+        mod.get_feature.side_effect = device_features.get
+        mod.has_feature.side_effect = lambda id: id in device_features
+
     device.children = []
     if children:
         for child in children:
@@ -260,6 +296,7 @@ def _mocked_device(
     device.protocol = _mock_protocol()
     device.config = device_config
     device.credentials_hash = credentials_hash
+
     return device
 
 
@@ -274,8 +311,8 @@ def _mocked_feature(
     precision_hint=None,
     choices=None,
     unit=None,
-    minimum_value=0,
-    maximum_value=2**16,  # Arbitrary max
+    minimum_value=None,
+    maximum_value=None,
 ) -> Feature:
     """Get a mocked feature.
 
@@ -305,11 +342,14 @@ def _mocked_feature(
     feature.unit = unit or fixture.get("unit")
 
     # number
-    feature.minimum_value = minimum_value or fixture.get("minimum_value")
-    feature.maximum_value = maximum_value or fixture.get("maximum_value")
+    min_val = minimum_value or fixture.get("minimum_value")
+    feature.minimum_value = 0 if min_val is None else min_val
+    max_val = maximum_value or fixture.get("maximum_value")
+    feature.maximum_value = 2**16 if max_val is None else max_val
 
     # select
     feature.choices = choices or fixture.get("choices")
+
     return feature
 
 
@@ -321,13 +361,7 @@ def _mocked_light_module(device) -> Light:
     light.state = LightState(
         light_on=True, brightness=light.brightness, color_temp=light.color_temp
     )
-    light.is_color = True
-    light.is_variable_color_temp = True
-    light.is_dimmable = True
-    light.is_brightness = True
-    light.has_effects = False
     light.hsv = (10, 30, 5)
-    light.valid_temperature_range = ColorTempRange(min=4000, max=9000)
     light.hw_info = {"sw_ver": "1.0.0", "hw_ver": "1.0.0"}
 
     async def _set_state(state, *_, **__):
@@ -360,7 +394,6 @@ def _mocked_light_module(device) -> Light:
 
 def _mocked_light_effect_module(device) -> LightEffect:
     effect = MagicMock(spec=LightEffect, name="Mocked light effect")
-    effect.has_effects = True
     effect.has_custom_effects = True
     effect.effect = "Effect1"
     effect.effect_list = ["Off", "Effect1", "Effect2"]
@@ -385,6 +418,15 @@ def _mocked_fan_module(effect) -> Fan:
     fan.fan_speed_level = 0
     fan.set_fan_speed_level = AsyncMock()
     return fan
+
+
+def _mocked_alarm_module(device):
+    alarm = MagicMock(auto_spec=Alarm, name="Mocked alarm")
+    alarm.active = False
+    alarm.play = AsyncMock()
+    alarm.stop = AsyncMock()
+
+    return alarm
 
 
 def _mocked_strip_children(features=None, alias=None) -> list[Device]:
@@ -453,6 +495,7 @@ MODULE_TO_MOCK_GEN = {
     Module.Light: _mocked_light_module,
     Module.LightEffect: _mocked_light_effect_module,
     Module.Fan: _mocked_fan_module,
+    Module.Alarm: _mocked_alarm_module,
 }
 
 

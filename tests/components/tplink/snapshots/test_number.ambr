@@ -41,9 +41,9 @@
     }),
     'area_id': None,
     'capabilities': dict({
-      'max': 65536,
+      'max': 60,
       'min': 0,
-      'mode': <NumberMode.AUTO: 'auto'>,
+      'mode': <NumberMode.BOX: 'box'>,
       'step': 1.0,
     }),
     'config_entry_id': <ANY>,
@@ -77,9 +77,9 @@
   StateSnapshot({
     'attributes': ReadOnlyDict({
       'friendly_name': 'my_device Smooth off',
-      'max': 65536,
+      'max': 60,
       'min': 0,
-      'mode': <NumberMode.AUTO: 'auto'>,
+      'mode': <NumberMode.BOX: 'box'>,
       'step': 1.0,
     }),
     'context': <ANY>,
@@ -96,9 +96,9 @@
     }),
     'area_id': None,
     'capabilities': dict({
-      'max': 65536,
+      'max': 60,
       'min': 0,
-      'mode': <NumberMode.AUTO: 'auto'>,
+      'mode': <NumberMode.BOX: 'box'>,
       'step': 1.0,
     }),
     'config_entry_id': <ANY>,
@@ -132,9 +132,9 @@
   StateSnapshot({
     'attributes': ReadOnlyDict({
       'friendly_name': 'my_device Smooth on',
-      'max': 65536,
+      'max': 60,
       'min': 0,
-      'mode': <NumberMode.AUTO: 'auto'>,
+      'mode': <NumberMode.BOX: 'box'>,
       'step': 1.0,
     }),
     'context': <ANY>,
@@ -151,9 +151,9 @@
     }),
     'area_id': None,
     'capabilities': dict({
-      'max': 65536,
+      'max': 10,
       'min': -10,
-      'mode': <NumberMode.AUTO: 'auto'>,
+      'mode': <NumberMode.BOX: 'box'>,
       'step': 1.0,
     }),
     'config_entry_id': <ANY>,
@@ -187,9 +187,9 @@
   StateSnapshot({
     'attributes': ReadOnlyDict({
       'friendly_name': 'my_device Temperature offset',
-      'max': 65536,
+      'max': 10,
       'min': -10,
-      'mode': <NumberMode.AUTO: 'auto'>,
+      'mode': <NumberMode.BOX: 'box'>,
       'step': 1.0,
     }),
     'context': <ANY>,
@@ -206,9 +206,9 @@
     }),
     'area_id': None,
     'capabilities': dict({
-      'max': 65536,
+      'max': 60,
       'min': 0,
-      'mode': <NumberMode.AUTO: 'auto'>,
+      'mode': <NumberMode.BOX: 'box'>,
       'step': 1.0,
     }),
     'config_entry_id': <ANY>,
@@ -242,9 +242,9 @@
   StateSnapshot({
     'attributes': ReadOnlyDict({
       'friendly_name': 'my_device Turn off in',
-      'max': 65536,
+      'max': 60,
       'min': 0,
-      'mode': <NumberMode.AUTO: 'auto'>,
+      'mode': <NumberMode.BOX: 'box'>,
       'step': 1.0,
     }),
     'context': <ANY>,
