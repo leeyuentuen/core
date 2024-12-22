@@ -21,6 +21,7 @@ SCOPES = [
     Scope.OPENID,
     Scope.OFFLINE_ACCESS,
     Scope.VEHICLE_DEVICE_DATA,
+    Scope.VEHICLE_LOCATION,
     Scope.VEHICLE_CMDS,
     Scope.VEHICLE_CHARGING_CMDS,
     Scope.ENERGY_DEVICE_DATA,
@@ -41,3 +42,10 @@ class TeslaFleetState(StrEnum):
     ONLINE = "online"
     ASLEEP = "asleep"
     OFFLINE = "offline"
+
+
+class TeslaFleetClimateSide(StrEnum):
+    """Tesla Fleet Climate Keeper Modes."""
+
+    DRIVER = "driver_temp"
+    PASSENGER = "passenger_temp"

@@ -227,7 +227,7 @@ def async_subscribe_internal(
             translation_placeholders={"topic": topic},
         ) from exc
     client = mqtt_data.client
-    if not client.connected and not mqtt_config_entry_enabled(hass):
+    if not mqtt_config_entry_enabled(hass):
         raise HomeAssistantError(
             f"Cannot subscribe to topic '{topic}', MQTT is not enabled",
             translation_key="mqtt_not_setup_cannot_subscribe",
@@ -376,7 +376,9 @@ class MQTT:
         self._simple_subscriptions: defaultdict[str, set[Subscription]] = defaultdict(
             set
         )
-        self._wildcard_subscriptions: set[Subscription] = set()
+        # To ensure the wildcard subscriptions order is preserved, we use a dict
+        # with `None` values instead of a set.
+        self._wildcard_subscriptions: dict[Subscription, None] = {}
         # _retained_topics prevents a Subscription from receiving a
         # retained message more than once per topic. This prevents flooding
         # already active subscribers when new subscribers subscribe to a topic
@@ -659,7 +661,7 @@ class MQTT:
                     self.conf.get(CONF_PORT, DEFAULT_PORT),
                     self.conf.get(CONF_KEEPALIVE, DEFAULT_KEEPALIVE),
                 )
-        except OSError as err:
+        except (OSError, mqtt.WebsocketConnectionError) as err:
             _LOGGER.error("Failed to connect to MQTT server due to exception: %s", err)
             self._async_connection_result(False)
         finally:
@@ -754,7 +756,7 @@ class MQTT:
         if subscription.is_simple_match:
             self._simple_subscriptions[subscription.topic].add(subscription)
         else:
-            self._wildcard_subscriptions.add(subscription)
+            self._wildcard_subscriptions[subscription] = None
 
     @callback
     def _async_untrack_subscription(self, subscription: Subscription) -> None:
@@ -772,7 +774,7 @@ class MQTT:
                 if not simple_subscriptions[topic]:
                     del simple_subscriptions[topic]
             else:
-                self._wildcard_subscriptions.remove(subscription)
+                del self._wildcard_subscriptions[subscription]
         except (KeyError, ValueError) as exc:
             raise HomeAssistantError("Can't remove subscription twice") from exc
 

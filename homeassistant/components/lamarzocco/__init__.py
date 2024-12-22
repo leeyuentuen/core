@@ -2,12 +2,12 @@
 
 import logging
 
-from lmcloud.client_bluetooth import LaMarzoccoBluetoothClient
-from lmcloud.client_cloud import LaMarzoccoCloudClient
-from lmcloud.client_local import LaMarzoccoLocalClient
-from lmcloud.const import BT_MODEL_PREFIXES, FirmwareType
-from lmcloud.exceptions import AuthFail, RequestNotSuccessful
 from packaging import version
+from pylamarzocco.client_bluetooth import LaMarzoccoBluetoothClient
+from pylamarzocco.client_cloud import LaMarzoccoCloudClient
+from pylamarzocco.client_local import LaMarzoccoLocalClient
+from pylamarzocco.const import BT_MODEL_PREFIXES, FirmwareType
+from pylamarzocco.exceptions import AuthFail, RequestNotSuccessful
 
 from homeassistant.components.bluetooth import async_discovered_service_info
 from homeassistant.config_entries import ConfigEntry
@@ -23,10 +23,10 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.helpers.httpx_client import create_async_httpx_client
 
 from .const import CONF_USE_BLUETOOTH, DOMAIN
-from .coordinator import LaMarzoccoUpdateCoordinator
+from .coordinator import LaMarzoccoConfigEntry, LaMarzoccoUpdateCoordinator
 
 PLATFORMS = [
     Platform.BINARY_SENSOR,
@@ -41,19 +41,17 @@ PLATFORMS = [
 
 _LOGGER = logging.getLogger(__name__)
 
-type LaMarzoccoConfigEntry = ConfigEntry[LaMarzoccoUpdateCoordinator]
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: LaMarzoccoConfigEntry) -> bool:
     """Set up La Marzocco as config entry."""
 
     assert entry.unique_id
     serial = entry.unique_id
-
+    client = create_async_httpx_client(hass)
     cloud_client = LaMarzoccoCloudClient(
         username=entry.data[CONF_USERNAME],
         password=entry.data[CONF_PASSWORD],
-        client=get_async_client(hass),
+        client=client,
     )
 
     # initialize local API
@@ -63,7 +61,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: LaMarzoccoConfigEntry) -
         local_client = LaMarzoccoLocalClient(
             host=host,
             local_bearer=entry.data[CONF_TOKEN],
-            client=get_async_client(hass),
+            client=client,
         )
 
     # initialize Bluetooth
@@ -103,12 +101,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: LaMarzoccoConfigEntry) -
 
     coordinator = LaMarzoccoUpdateCoordinator(
         hass=hass,
+        entry=entry,
         local_client=local_client,
         cloud_client=cloud_client,
         bluetooth_client=bluetooth_client,
     )
 
-    await coordinator.async_setup()
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
 
