@@ -27,6 +27,8 @@ from .const import DOMAIN, POWER_OFF, POWER_ON, VENTILATION_STEP, MieleAppliance
 from .coordinator import MieleConfigEntry, MieleDataUpdateCoordinator
 from .entity import MieleEntity
 
+PARALLEL_UPDATES = 1
+
 _LOGGER = logging.getLogger(__name__)
 
 SPEED_RANGE = (1, 4)
@@ -64,7 +66,7 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the fan platform."""
-    coordinator = config_entry.runtime_data
+    coordinator = config_entry.runtime_data.coordinator
     added_devices: set[str] = set()
 
     def _async_add_new_devices() -> None:
@@ -140,14 +142,15 @@ class MieleFan(MieleEntity, FanEntity):
                 await self.api.send_action(
                     self._device_id, {VENTILATION_STEP: ventilation_step}
                 )
-            except ClientResponseError as ex:
+            except ClientResponseError as err:
+                _LOGGER.debug("Error setting fan state for %s: %s", self.entity_id, err)
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
                     translation_key="set_state_error",
                     translation_placeholders={
                         "entity": self.entity_id,
                     },
-                ) from ex
+                ) from err
             self.device.state_ventilation_step = ventilation_step
             self.async_write_ha_state()
 
@@ -169,6 +172,7 @@ class MieleFan(MieleEntity, FanEntity):
                 translation_key="set_state_error",
                 translation_placeholders={
                     "entity": self.entity_id,
+                    "err_status": str(ex.status),
                 },
             ) from ex
 
@@ -186,6 +190,7 @@ class MieleFan(MieleEntity, FanEntity):
                 translation_key="set_state_error",
                 translation_placeholders={
                     "entity": self.entity_id,
+                    "err_status": str(ex.status),
                 },
             ) from ex
 

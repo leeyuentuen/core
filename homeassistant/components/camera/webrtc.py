@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import asyncio
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from functools import cache, partial, wraps
 import logging
@@ -12,12 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from mashumaro import MissingField
 import voluptuous as vol
-from webrtc_models import (
-    RTCConfiguration,
-    RTCIceCandidate,
-    RTCIceCandidateInit,
-    RTCIceServer,
-)
+from webrtc_models import RTCConfiguration, RTCIceCandidate, RTCIceCandidateInit
 
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
@@ -37,9 +32,6 @@ _LOGGER = logging.getLogger(__name__)
 
 DATA_WEBRTC_PROVIDERS: HassKey[set[CameraWebRTCProvider]] = HassKey(
     "camera_webrtc_providers"
-)
-DATA_ICE_SERVERS: HassKey[list[Callable[[], Iterable[RTCIceServer]]]] = HassKey(
-    "camera_webrtc_ice_servers"
 )
 
 
@@ -111,13 +103,11 @@ class WebRTCClientConfiguration:
 
     configuration: RTCConfiguration = field(default_factory=RTCConfiguration)
     data_channel: str | None = None
-    get_candidates_upfront: bool = False
 
     def to_frontend_dict(self) -> dict[str, Any]:
         """Return a dict that can be used by the frontend."""
         data: dict[str, Any] = {
             "configuration": self.configuration.to_dict(),
-            "getCandidatesUpfront": self.get_candidates_upfront,
         }
         if self.data_channel is not None:
             data["dataChannel"] = self.data_channel
@@ -157,6 +147,15 @@ class CameraWebRTCProvider(ABC):
     def async_close_session(self, session_id: str) -> None:
         """Close the session."""
         return  ## This is an optional method so we need a default here.
+
+    async def async_get_image(
+        self,
+        camera: Camera,
+        width: int | None = None,
+        height: int | None = None,
+    ) -> bytes | None:
+        """Get an image from the camera."""
+        return None
 
 
 @callback
@@ -360,21 +359,3 @@ async def async_get_supported_provider(
             return provider
 
     return None
-
-
-@callback
-def async_register_ice_servers(
-    hass: HomeAssistant,
-    get_ice_server_fn: Callable[[], Iterable[RTCIceServer]],
-) -> Callable[[], None]:
-    """Register a ICE server.
-
-    The registering integration is responsible to implement caching if needed.
-    """
-    servers = hass.data.setdefault(DATA_ICE_SERVERS, [])
-
-    def remove() -> None:
-        servers.remove(get_ice_server_fn)
-
-    servers.append(get_ice_server_fn)
-    return remove
